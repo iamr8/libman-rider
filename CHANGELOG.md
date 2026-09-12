@@ -6,18 +6,23 @@ All notable changes to this plugin are documented here. Format follows
 
 ## [0.1.0]
 
-First release. Brings Visual Studio's LibMan experience to Rider by wrapping the
-`libman` CLI.
+First release. Brings Visual Studio's LibMan experience to Rider, with an inline update
+view over `libman.json`.
 
 ### Added
-- Editor intentions (Alt+Enter) on a library entry in `libman.json`:
-  - **Check for updates** — shows the latest version, or "up to date".
-  - **Update to latest** and **Update to latest prerelease**.
-  - **Uninstall** the library.
-- Context-menu actions on `libman.json` (Solution Explorer + editor):
-  **Restore**, **Clean**, and **Manage** (open the manifest).
-- CLI errors and missing-tool cases are shown as notifications with a
-  **Copy Details** action, never as plugin crashes.
+- **Inline updates**: opening `libman.json` checks each library for updates (cached, 1-hour
+  expiry). The version is highlighted by the biggest available jump - green (patch),
+  yellow (minor), red (major or pre-release).
+- **Clickable version chips** above each library line - one per available update
+  (patch / minor / major / pre-release); click to install. A **Check for updates** chip
+  re-checks and refreshes the cache on demand.
+- **Library description** from the provider (up to 3 lines, truncated) with a link to the
+  library's provider page.
+- **Providers**: cdnjs, unpkg (npm), and jsDelivr (npm + GitHub).
+- **Context-menu actions** on `libman.json` (Solution Explorer + editor): **Restore**,
+  **Clean**, **Manage**. **Uninstall** on Alt+Enter.
+- CLI, network, and provider errors are shown as notifications with a **Copy Details**
+  action, never as plugin crashes.
 
 ### Planned
 - **Enable/Disable Restore on Build** context action (toggles the

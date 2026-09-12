@@ -11,15 +11,20 @@
         fills that gap by wrapping the official
         <a href="https://learn.microsoft.com/aspnet/core/client-side/libman/libman-cli">libman</a> CLI.</p>
 
-        <p><b>Editor intentions</b> (Alt+Enter) on a library entry in <code>libman.json</code>:</p>
+        <p>Open a <code>libman.json</code> and every library is checked for updates (results are
+        cached). For each library you get, right in the editor:</p>
         <ul>
-          <li><b>Check for updates</b> - shows the latest version, or "already up to date".</li>
-          <li><b>Update to latest version</b> and <b>Update to latest prerelease</b>.</li>
-          <li><b>Uninstall this library</b> - removes its files and its manifest entry.</li>
+          <li><b>A colored version highlight</b> - green for a patch, yellow for a minor, red for a
+              major or pre-release update.</li>
+          <li><b>Clickable version chips above the line</b> - one per available update
+              (patch / minor / major / pre-release); click to install it. A <b>Check for updates</b>
+              chip re-checks and refreshes the cache on demand.</li>
+          <li><b>A short description</b> from the provider (cdnjs, npm/unpkg, jsDelivr), with a link
+              to the library's page.</li>
         </ul>
 
         <p><b>Context-menu actions</b> on <code>libman.json</code> (Solution Explorer and editor):
-        <b>Restore</b>, <b>Clean</b>, and <b>Manage</b> client-side libraries.</p>
+        <b>Restore</b>, <b>Clean</b>, and <b>Manage</b>; plus <b>Uninstall</b> on Alt+Enter.</p>
 
         <p>CLI failures (missing tool, network, provider errors) are shown as notifications with a
         <b>Copy Details</b> action - never as plugin crashes.</p>
@@ -46,19 +51,17 @@
         <!-- Balloons for libman CLI / user-environment failures (not plugin bugs). -->
         <notificationGroup id="LibMan GUI" displayType="BALLOON"/>
 
-        <!-- Alt+Enter actions on a library entry in libman.json (self-gated via isAvailable). -->
-        <intentionAction>
-            <className>com.github.iamr8.libman.ui.intentions.CheckForUpdatesIntention</className>
-            <category>LibMan</category>
-        </intentionAction>
-        <intentionAction>
-            <className>com.github.iamr8.libman.ui.intentions.UpdateToLatestIntention</className>
-            <category>LibMan</category>
-        </intentionAction>
-        <intentionAction>
-            <className>com.github.iamr8.libman.ui.intentions.UpdateToPrereleaseIntention</className>
-            <category>LibMan</category>
-        </intentionAction>
+        <!-- Colors the version in each library value by the biggest available update (fetches off-EDT). -->
+        <externalAnnotator
+            language="JSON"
+            implementationClass="com.github.iamr8.libman.ui.LibraryUpdateAnnotator"/>
+
+        <!-- Block above each library line: description + provider link + clickable version chips. -->
+        <codeInsight.inlayProvider
+            language="JSON"
+            implementationClass="com.github.iamr8.libman.ui.LibraryInlayProvider"/>
+
+        <!-- Alt+Enter: uninstall a library entry (self-gated via isAvailable). -->
         <intentionAction>
             <className>com.github.iamr8.libman.ui.intentions.UninstallLibraryIntention</className>
             <category>LibMan</category>

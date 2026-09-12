@@ -6,6 +6,7 @@ import com.intellij.json.psi.JsonFile
 import com.intellij.json.psi.JsonObject
 import com.intellij.json.psi.JsonProperty
 import com.intellij.json.psi.JsonStringLiteral
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 
@@ -31,25 +32,56 @@ object ManifestPsi {
     fun isManifest(file: PsiFile?): Boolean =
         file is JsonFile && file.name.equals(FILE_NAME, ignoreCase = true)
 
-    /**
-     * Resolves the library entry containing [offset], or `null` if the caret isn't inside one.
-     * A library entry is a [JsonObject] that is an element of the top-level `libraries` array.
-     */
-    fun libraryEntryAt(file: PsiFile, offset: Int): LibraryEntryContext? {
-        if (!isManifest(file)) return null
+    /** Every library entry object in the top-level `libraries` array. */
+    fun libraryObjects(file: PsiFile): List<JsonObject> {
+        if (!isManifest(file)) return emptyList()
+        val root = (file as? JsonFile)?.topLevelValue as? JsonObject ?: return emptyList()
+        val array = root.findProperty("libraries")?.value as? JsonArray ?: return emptyList()
+        return array.valueList.filterIsInstance<JsonObject>()
+    }
+
+    /** Resolves the context for a specific library entry object. */
+    fun contextOf(obj: JsonObject, file: PsiFile): LibraryEntryContext? {
         val manifestDir = file.virtualFile?.parent?.path ?: return null
-
-        val obj = enclosingLibraryObject(file.findElementAt(offset)) ?: return null
         val library = stringValue(obj, "library") ?: return null
-
-        val entryProvider = stringValue(obj, "provider")
-        val defaultProvider = (file as? JsonFile)?.let { defaultProvider(it) }
-        val provider = entryProvider ?: defaultProvider
-
+        val provider = stringValue(obj, "provider") ?: (file as? JsonFile)?.let { defaultProvider(it) }
         return LibraryEntryContext(LibraryId.parse(library, provider), provider, manifestDir)
     }
 
-    /** Walks up from [start] to the nearest [JsonObject] that is an item of the `libraries` array. */
+    /** Resolves the library entry containing [offset], or `null` if the caret isn't inside one. */
+    fun libraryEntryAt(file: PsiFile, offset: Int): LibraryEntryContext? {
+        if (!isManifest(file)) return null
+        val obj = enclosingLibraryObject(file.findElementAt(offset)) ?: return null
+        return contextOf(obj, file)
+    }
+
+    /** True if [obj] is a direct element of the top-level `libraries` array. */
+    fun isLibraryEntry(obj: JsonObject): Boolean {
+        val array = obj.parent as? JsonArray ?: return false
+        val property = array.parent as? JsonProperty ?: return false
+        return property.name == "libraries"
+    }
+
+    /** The `library` value string literal of an entry, if present. */
+    fun libraryValueLiteral(obj: JsonObject): JsonStringLiteral? =
+        obj.findProperty("library")?.value as? JsonStringLiteral
+
+    /**
+     * TextRange of just the version substring inside the `library` value (the part after the last
+     * `@`), or `null` when the entry has no version or is a filesystem path.
+     */
+    fun versionRange(obj: JsonObject, ctx: LibraryEntryContext): TextRange? {
+        if (ctx.isFilesystem || ctx.id.version == null) return null
+        val literal = libraryValueLiteral(obj) ?: return null
+        val content = ctx.id.raw // the raw library value, e.g. "jquery@3.6.0"
+        val at = content.lastIndexOf('@')
+        if (at <= 0) return null
+        // literal.textRange covers the surrounding quotes; +1 skips the opening quote. libman
+        // library ids contain no escapes, so content offsets map directly onto the literal text.
+        val contentStart = literal.textRange.startOffset + 1
+        return TextRange(contentStart + at + 1, contentStart + content.length)
+    }
+
     private fun enclosingLibraryObject(start: PsiElement?): JsonObject? {
         var e: PsiElement? = start
         while (e != null) {

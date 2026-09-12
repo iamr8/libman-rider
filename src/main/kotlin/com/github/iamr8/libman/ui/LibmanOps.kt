@@ -3,8 +3,6 @@ package com.github.iamr8.libman.ui
 import com.github.iamr8.libman.cli.OpResultParser
 import com.github.iamr8.libman.cli.UninstallOutcome
 import com.github.iamr8.libman.cli.UpdateOutcome
-import com.github.iamr8.libman.cli.WhatIfParser
-import com.github.iamr8.libman.cli.WhatIfResult
 import com.intellij.openapi.project.Project
 
 /**
@@ -13,45 +11,17 @@ import com.intellij.openapi.project.Project
  */
 object LibmanOps {
 
-    /** Check for a newer version (read-only), then offer to apply it. */
-    fun checkForUpdates(project: Project, manifestDir: String, name: String, pre: Boolean = false) {
-        val label = if (pre) "$name (prerelease)" else name
+    /**
+     * Update a library. With [to] set, installs that exact version (used by the version chips);
+     * otherwise moves to the latest (stable, or prerelease when [pre]).
+     */
+    fun update(project: Project, manifestDir: String, name: String, pre: Boolean = false, to: String? = null) {
         LibmanRun.run(
             project,
-            title = "Checking $label for updates",
-            op = "check",
-            manifestDir = manifestDir,
-            action = { it.whatIf(manifestDir, name, pre) },
-            onOk = { r ->
-                when (val res = WhatIfParser.parse(r.stdout)) {
-                    is WhatIfResult.UpToDate ->
-                        LibmanNotifications.info(project, name, "Already up to date.")
-
-                    is WhatIfResult.WouldUpdate ->
-                        LibmanNotifications.infoWithAction(
-                            project,
-                            "$name: update available",
-                            "Latest version: ${res.version}",
-                            actionText = "Update",
-                        ) { update(project, manifestDir, name, pre) }
-
-                    WhatIfResult.Unknown ->
-                        LibmanNotifications.failure(
-                            project, name, "Couldn't read the latest version.", r.combinedOutput(),
-                        )
-                }
-            },
-        )
-    }
-
-    /** Update a library to its latest (stable, or prerelease when [pre]). */
-    fun update(project: Project, manifestDir: String, name: String, pre: Boolean = false) {
-        LibmanRun.run(
-            project,
-            title = "Updating $name",
+            title = if (to != null) "Installing $name@$to" else "Updating $name",
             op = "update",
             manifestDir = manifestDir,
-            action = { it.update(manifestDir, name, pre) },
+            action = { it.update(manifestDir, name, pre, to) },
             // libman exits 0 even for a no-op or a missing library, so read the outcome from stdout.
             onOk = { r ->
                 when (val outcome = OpResultParser.parseUpdate(r.stdout)) {

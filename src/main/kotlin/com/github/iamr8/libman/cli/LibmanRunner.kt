@@ -41,9 +41,6 @@ class LibmanRunner(
         false
     }
 
-    fun whatIf(manifestDir: String, name: String, pre: Boolean = false): LibmanResult =
-        run(LibmanCommand.whatIf(libmanPath, name, pre), manifestDir, NETWORK_TIMEOUT_MS)
-
     fun update(manifestDir: String, name: String, pre: Boolean = false, to: String? = null): LibmanResult =
         run(LibmanCommand.update(libmanPath, name, pre, to), manifestDir, NETWORK_TIMEOUT_MS)
 

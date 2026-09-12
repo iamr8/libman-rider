@@ -36,14 +36,4 @@ object LibmanCommand {
             if (pre) add("--pre")
             if (!to.isNullOrBlank()) { add("--to"); add(to) }
         }
-
-    /**
-     * `libman update <name> --whatif [--pre]` — read-only "what would happen".
-     * Prints the target version (or "already up to date") without changing anything.
-     */
-    fun whatIf(libmanPath: String, name: String, pre: Boolean = false): List<String> =
-        buildList {
-            add(libmanPath); add("update"); add(name); add("--whatif")
-            if (pre) add("--pre")
-        }
 }

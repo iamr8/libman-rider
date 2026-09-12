@@ -42,15 +42,4 @@ class LibmanCommandTest {
     @Test fun `update ignores blank to`() {
         assertEquals(listOf(libman, "update", "jquery"), LibmanCommand.update(libman, "jquery", to = "  "))
     }
-
-    @Test fun `whatif latest`() {
-        assertEquals(listOf(libman, "update", "jquery", "--whatif"), LibmanCommand.whatIf(libman, "jquery"))
-    }
-
-    @Test fun `whatif prerelease`() {
-        assertEquals(
-            listOf(libman, "update", "jquery", "--whatif", "--pre"),
-            LibmanCommand.whatIf(libman, "jquery", pre = true),
-        )
-    }
 }

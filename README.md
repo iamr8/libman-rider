@@ -11,16 +11,26 @@ Rider has no built-in LibMan support (see the long-standing request
 
 ## Features
 
-- **Editor intentions** (Alt+Enter) on a library entry in `libman.json`:
-  - **Check for updates** - shows the latest version, or "up to date".
-  - **Update to latest** / **Update to latest prerelease**.
-  - **Uninstall** the library (removes files and the manifest entry).
+Open a `libman.json` and every library is checked for updates (results are cached). For each
+library, right in the editor:
+
+- **Colored version highlight** - green for a patch update, yellow for a minor, red for a major
+  or pre-release.
+- **Clickable version chips above the line** - one per available update
+  (patch / minor / major / pre-release); click to install it. A **Check for updates** chip
+  re-checks and refreshes the cache on demand.
+- **Library description** from the provider (up to 3 lines, truncated) with a link to the
+  library's page.
+
+Providers supported: **cdnjs**, **unpkg** (npm), and **jsDelivr** (npm + GitHub).
+
+Also:
+
 - **Context-menu actions** on `libman.json` (Solution Explorer and editor):
-  - **Restore Client-Side Libraries**
-  - **Clean Client-Side Libraries**
-  - **Manage Client-Side Libraries** (open the manifest)
-- CLI failures (missing tool, network, provider errors) are shown as notifications with a
-  **Copy Details** action - not as plugin crashes.
+  **Restore**, **Clean**, **Manage**.
+- **Uninstall** a library on Alt+Enter.
+- CLI, network, and provider errors are shown as notifications with a **Copy Details**
+  action - not as plugin crashes.
 
 Planned: an **Enable / Disable Restore on Build** context action.
 
@@ -36,10 +46,12 @@ Planned: an **Enable / Disable Restore on Build** context action.
 
 ## How it works
 
-The plugin shells out to `libman`. "Check for updates" runs `libman update <lib> --whatif`
-(read-only); updates run `libman update`; restore/clean/uninstall map to the matching commands.
-Each command runs in the manifest's own directory, so multiple `libman.json` files in one solution
-are handled independently.
+Available versions and the description come from the provider's public API - cdnjs
+(`api.cdnjs.com`), npm (`registry.npmjs.org`, for unpkg and npm-form jsDelivr), and the jsDelivr
+data API (for GitHub-form jsDelivr). Lookups are cached per project with a 1-hour expiry; the
+**Check for updates** chip forces a refresh. Installing a version, restore, clean, and uninstall
+shell out to the `libman` CLI, run in the manifest's own directory - so multiple `libman.json`
+files in one solution are handled independently.
 
 ## Building
 
@@ -47,7 +59,7 @@ Tests and the plugin build run in CI (see `.github/workflows/build.yml`). Locall
 JDK and the Gradle wrapper:
 
 ```bash
-./gradlew test          # pure logic: id parsing, arg builders, whatif parser, severity
+./gradlew test          # pure logic: id parsing, semver, update buckets, catalog parsers
 ./gradlew buildPlugin   # produces build/distributions/*.zip
 ./gradlew runIde        # sandbox Rider with the plugin
 ```
