@@ -1,0 +1,94 @@
+<idea-plugin>
+    <id>com.github.iamr8.libman</id>
+    <name>LibMan GUI</name>
+    <vendor url="https://github.com/iamr8" email="arash.shabbeh@gmail.com">iamr8</vendor>
+
+    <description><![CDATA[
+        <p>Manage client-side libraries in <code>libman.json</code> without leaving Rider - the
+        Visual Studio <b>Library Manager (LibMan)</b> experience, brought to JetBrains Rider.
+        Rider has no built-in LibMan support
+        (<a href="https://youtrack.jetbrains.com/issue/RIDER-15368">RIDER-15368</a>); this plugin
+        fills that gap by wrapping the official
+        <a href="https://learn.microsoft.com/aspnet/core/client-side/libman/libman-cli">libman</a> CLI.</p>
+
+        <p><b>Editor intentions</b> (Alt+Enter) on a library entry in <code>libman.json</code>:</p>
+        <ul>
+          <li><b>Check for updates</b> - shows the latest version, or "already up to date".</li>
+          <li><b>Update to latest version</b> and <b>Update to latest prerelease</b>.</li>
+          <li><b>Uninstall this library</b> - removes its files and its manifest entry.</li>
+        </ul>
+
+        <p><b>Context-menu actions</b> on <code>libman.json</code> (Solution Explorer and editor):
+        <b>Restore</b>, <b>Clean</b>, and <b>Manage</b> client-side libraries.</p>
+
+        <p>CLI failures (missing tool, network, provider errors) are shown as notifications with a
+        <b>Copy Details</b> action - never as plugin crashes.</p>
+
+        <p>Requires the LibMan CLI:
+        <code>dotnet tool install -g Microsoft.Web.LibraryManager.Cli</code>.</p>
+
+        <p>Source &amp; issues: <a href="https://github.com/iamr8/libman-rider">github.com/iamr8/libman-rider</a></p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        See the <a href="https://github.com/iamr8/libman-rider/blob/main/CHANGELOG.md">CHANGELOG</a>
+        for release notes.
+    ]]></change-notes>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- libman.json is JSON; the intentions read/edit it via the bundled JSON PSI. -->
+    <depends>com.intellij.modules.json</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Report plugin exceptions (only when the user chooses) to the Marketplace Exceptions tab. -->
+        <errorHandler implementation="com.intellij.diagnostic.JetBrainsMarketplaceErrorReportSubmitter"/>
+
+        <!-- Balloons for libman CLI / user-environment failures (not plugin bugs). -->
+        <notificationGroup id="LibMan GUI" displayType="BALLOON"/>
+
+        <!-- Alt+Enter actions on a library entry in libman.json (self-gated via isAvailable). -->
+        <intentionAction>
+            <className>com.github.iamr8.libman.ui.intentions.CheckForUpdatesIntention</className>
+            <category>LibMan</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.github.iamr8.libman.ui.intentions.UpdateToLatestIntention</className>
+            <category>LibMan</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.github.iamr8.libman.ui.intentions.UpdateToPrereleaseIntention</className>
+            <category>LibMan</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.github.iamr8.libman.ui.intentions.UninstallLibraryIntention</className>
+            <category>LibMan</category>
+        </intentionAction>
+
+        <!-- Advertise the plugin to users whose projects reference LibMan's build package. -->
+        <dependencySupport kind="dotnet" coordinate="Microsoft.Web.LibraryManager.Build" displayName="NuGet"/>
+    </extensions>
+
+    <actions>
+        <group id="com.github.iamr8.libman.LibmanGroup"
+               class="com.github.iamr8.libman.ui.actions.LibmanActionGroup"
+               popup="true"
+               text="Client-Side Libraries (LibMan)">
+            <action id="com.github.iamr8.libman.Restore"
+                    class="com.github.iamr8.libman.ui.actions.RestoreAction"
+                    text="Restore Client-Side Libraries"
+                    description="Download every library defined in libman.json"/>
+            <action id="com.github.iamr8.libman.Clean"
+                    class="com.github.iamr8.libman.ui.actions.CleanAction"
+                    text="Clean Client-Side Libraries"
+                    description="Delete files previously restored via LibMan"/>
+            <action id="com.github.iamr8.libman.Manage"
+                    class="com.github.iamr8.libman.ui.actions.ManageAction"
+                    text="Manage Client-Side Libraries"
+                    description="Open libman.json for editing"/>
+            <!-- Rider's Solution Explorer, the generic project view, and the editor right-click menu. -->
+            <add-to-group group-id="SolutionExplorerPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </group>
+    </actions>
+</idea-plugin>

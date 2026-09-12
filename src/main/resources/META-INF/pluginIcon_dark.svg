@@ -1,0 +1,8 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="3" y="3" width="34" height="34" rx="8" fill="#548AF7" fill-opacity="0.16"/>
+  <!-- Three book spines standing on a shelf (a "library"). -->
+  <rect x="11" y="12" width="4.6" height="16" rx="1.2" fill="none" stroke="#548AF7" stroke-width="2.1"/>
+  <rect x="17.7" y="12" width="4.6" height="16" rx="1.2" fill="none" stroke="#548AF7" stroke-width="2.1"/>
+  <path d="M25.2 13.4 29.8 12l3.1 15.6-4.6 1z" fill="none" stroke="#548AF7" stroke-width="2.1" stroke-linejoin="round"/>
+  <path d="M8 30h24" stroke="#548AF7" stroke-width="2.1" stroke-linecap="round"/>
+</svg>
