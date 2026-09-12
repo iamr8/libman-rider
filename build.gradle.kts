@@ -31,7 +31,7 @@ dependencies {
         if (file("/Applications/Rider.app").exists()) {
             local("/Applications/Rider.app")
         } else {
-            rider("2026.1.4", useInstaller = false)
+            rider("2026.1.4") { useInstaller = false }
         }
         // libman.json is JSON — the intentions read/edit it via the bundled JSON PSI.
         bundledPlugin("com.intellij.modules.json")
