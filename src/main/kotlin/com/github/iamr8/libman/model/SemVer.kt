@@ -8,7 +8,7 @@ package com.github.iamr8.libman.model
  *
  * Pure and platform-free for unit testing.
  */
-data class SemVer(
+class SemVer(
     val major: Int,
     val minor: Int,
     val patch: Int,
@@ -19,6 +19,21 @@ data class SemVer(
 ) : Comparable<SemVer> {
 
     val isPrerelease: Boolean get() = prerelease.isNotEmpty()
+
+    // Equality is by version identity (build metadata and the raw spelling are ignored), so
+    // "3" equals "3.0.0" - consistent with compareTo returning 0 for them.
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is SemVer &&
+            major == other.major && minor == other.minor && patch == other.patch &&
+            prerelease == other.prerelease)
+
+    override fun hashCode(): Int {
+        var result = major
+        result = 31 * result + minor
+        result = 31 * result + patch
+        result = 31 * result + prerelease.hashCode()
+        return result
+    }
 
     override fun compareTo(other: SemVer): Int {
         (major - other.major).let { if (it != 0) return it.coerceIn(-1, 1) }

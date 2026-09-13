@@ -7,7 +7,6 @@ import com.github.iamr8.libman.provider.ProviderCatalog
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.ExternalAnnotator
 import com.intellij.lang.annotation.HighlightSeverity
-import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -38,14 +37,13 @@ class LibraryUpdateAnnotator :
 
     override fun collectInformation(file: PsiFile): Collected? {
         if (!ManifestPsi.isManifest(file)) return null
-        val entries = runReadAction {
-            ManifestPsi.libraryObjects(file).mapNotNull { obj ->
-                val ctx = ManifestPsi.contextOf(obj, file) ?: return@mapNotNull null
-                val version = ctx.id.version ?: return@mapNotNull null
-                if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
-                val range = ManifestPsi.versionRange(obj, ctx) ?: return@mapNotNull null
-                Entry(ctx.provider, ctx.id.name, version, range)
-            }
+        // collectInformation is called by the platform inside a read action.
+        val entries = ManifestPsi.libraryObjects(file).mapNotNull { obj ->
+            val ctx = ManifestPsi.contextOf(obj, file) ?: return@mapNotNull null
+            val version = ctx.id.version ?: return@mapNotNull null
+            if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
+            val range = ManifestPsi.versionRange(obj, ctx) ?: return@mapNotNull null
+            Entry(ctx.provider, ctx.id.name, version, range)
         }
         return if (entries.isEmpty()) null else Collected(file.project, entries)
     }
