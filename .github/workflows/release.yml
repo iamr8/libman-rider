@@ -1,0 +1,137 @@
+name: Release
+
+# Publishing happens from the `release` branch only. Merge a PR (with the VERSION bump in it)
+# into `release`; if VERSION is higher than the last released tag, the `deploy` job runs as a
+# GitHub Deployment to the `marketplace` environment — it tags, creates a GitHub Release, and
+# publishes to the JetBrains Marketplace. main only builds/verifies (see build.yml).
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  deployments: write
+
+jobs:
+  # Decide whether this VERSION is a new release (higher than the last v* tag). No deployment here.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
+      release: ${{ steps.gate.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Gate on version
+        id: gate
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' \
+            || { echo "::error::Invalid version '$VERSION' in VERSION file"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          LATEST="$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -n1 || true)"
+          if [ -z "$LATEST" ]; then
+            echo "No previous release tag — releasing $VERSION."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HIGHEST="$(printf '%s\n%s\n' "$VERSION" "$LATEST" | sort -V | tail -n1)"
+          if [ "$VERSION" = "$LATEST" ] || [ "$HIGHEST" != "$VERSION" ]; then
+            echo "::notice::VERSION $VERSION is not higher than last released v$LATEST — skipping release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Releasing $VERSION (previous v$LATEST)."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The deployment: tag + GitHub Release + Marketplace publish, tracked under the `marketplace`
+  # environment (see it in the repo's Environments tab; add required reviewers there to gate publishing).
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: marketplace
+      # Marketplace slug is the numeric id joined to the repo name, e.g. 12345-libman-rider.
+      url: https://plugins.jetbrains.com/plugin/${{ vars.PLUGIN_ID }}-${{ github.event.repository.name }}
+    env:
+      PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+      VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build plugin
+        run: ./gradlew buildPlugin --stacktrace
+
+      - name: Tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.gate.outputs.version }}
+          name: v${{ needs.gate.outputs.version }}
+          generate_release_notes: true
+          files: build/distributions/*.zip
+
+      - name: Publish to JetBrains Marketplace
+        # Requires PUBLISH_TOKEN (set after the first manual Marketplace upload + approval).
+        if: env.PUBLISH_TOKEN != ''
+        run: ./gradlew publishPlugin --stacktrace
+
+      - name: Link Marketplace version in release notes
+        # Append a Marketplace link to the GitHub Release. Marketplace exposes version pages by an
+        # internal update id (not the semver), so we resolve it from the public API. A freshly
+        # published version is under review until approved, so the id may not exist yet — in that
+        # case we link the versions page as a fallback.
+        if: vars.PLUGIN_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          # Numeric plugin id lives in a repo Actions variable; the slug is id + repo name.
+          PLUGIN_ID: ${{ vars.PLUGIN_ID }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          MARKETPLACE_BASE="https://plugins.jetbrains.com"
+          PLUGIN_SLUG="${PLUGIN_ID}-${REPO_NAME}"
+          UPDATE_ID=""
+          for _ in 1 2 3 4 5 6; do
+            UPDATE_ID="$(curl -fsSL "$MARKETPLACE_BASE/api/plugins/$PLUGIN_ID/updates" \
+              | jq -r --arg v "$VERSION" 'map(select(.version==$v)) | (first // {}) | .id // empty')"
+            [ -n "$UPDATE_ID" ] && break
+            sleep 15
+          done
+          if [ -n "$UPDATE_ID" ]; then
+            MP_URL="$MARKETPLACE_BASE/plugin/$PLUGIN_SLUG/versions/stable/$UPDATE_ID"
+            echo "::notice::Marketplace v$VERSION → $MP_URL"
+          else
+            MP_URL="$MARKETPLACE_BASE/plugin/$PLUGIN_SLUG/versions"
+            echo "::notice::Marketplace update id for $VERSION not found yet (under review or not published) — linking versions page."
+          fi
+          BODY="$(gh release view "v$VERSION" --json body -q .body)"
+          printf '%s\n\n---\n📦 **JetBrains Marketplace:** %s\n' "$BODY" "$MP_URL" \
+            | gh release edit "v$VERSION" --notes-file -
