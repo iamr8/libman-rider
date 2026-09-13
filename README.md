@@ -68,6 +68,7 @@ JDK and the Gradle wrapper:
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Wraps the MIT-licensed [LibMan CLI](https://github.com/aspnet/LibraryManager),
+which the user installs separately; this plugin bundles none of its code.
 
 <sub>Not affiliated with or endorsed by Microsoft. LibMan and Library Manager are names of the Microsoft tool this plugin integrates.</sub>
