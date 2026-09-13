@@ -56,6 +56,11 @@
             language="JSON"
             implementationClass="com.github.iamr8.libman.ui.LibraryUpdateAnnotator"/>
 
+        <!-- Structural checks (no network): unknown provider / outdated or unknown schema version. -->
+        <annotator
+            language="JSON"
+            implementationClass="com.github.iamr8.libman.ui.ManifestValidationAnnotator"/>
+
         <!-- Block above each library line: description + provider link + clickable version chips. -->
         <codeInsight.inlayProvider
             language="JSON"

@@ -22,6 +22,7 @@ import com.intellij.json.psi.JsonObject
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import java.awt.Cursor
 import javax.swing.JPanel
 
 /**
@@ -65,35 +66,40 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                     info?.let { i -> UpdateBuckets.compute(it, i.versions, includePrerelease = true) }
                 }
 
+                // Block-above elements render higher priority closest to the anchor line, so we
+                // increment: the description lines are added first (lowest priority) and sit on top;
+                // the single action row is added last (highest) and sits just above the library line.
                 var priority = 100
                 fun addLine(presentation: InlayPresentation) {
-                    sink.addBlockElement(offset, relatesToPrecedingText = true, showAbove = true, priority = priority--, presentation)
+                    sink.addBlockElement(offset, relatesToPrecedingText = true, showAbove = true, priority = priority++, presentation)
                 }
 
-                // Description (up to 3 gray lines).
-                TextWrap.wrap(info?.description, maxWidth = 90, maxLines = 3).forEach { addLine(factory.smallText(it)) }
+                // Description on top: up to 3 gray lines, comment-styled with a left bar.
+                TextWrap.wrap(info?.description, maxWidth = 88, maxLines = 3).forEach { addLine(factory.smallText("│ $it")) }
 
-                // Provider-page link.
+                // One action row just above the line: provider link + "Check for updates" + version chips.
+                val actions = mutableListOf<InlayPresentation>()
                 ProviderCatalog.pageUrl(ctx.provider, ctx.id.name)?.let { url ->
-                    addLine(factory.onClick(factory.smallText("Open on ${providerLabel(ctx.provider)}  ↗"), MouseButton.Left) { _, _ ->
+                    actions += factory.referenceOnHover(factory.smallText("Open on ${providerLabel(ctx.provider)} ↗")) { _, _ ->
                         BrowserUtil.browse(url)
-                    })
+                    }
                 }
-
-                // Chips row: "Check for updates" + one per available version.
-                val chips = mutableListOf<InlayPresentation>()
-                chips += chip("↻ Check for updates") { service.refreshInBackground(ctx.provider, ctx.id.name) }
+                actions += chip("↻ Check for updates") { service.refreshInBackground(ctx.provider, ctx.id.name) }
                 buckets?.candidates()?.forEach { c ->
-                    chips += chip("${c.version.raw} (${c.kind.label})") {
+                    actions += chip("${c.version.raw} (${c.kind.label})") {
                         LibmanOps.update(project, ctx.manifestDir, ctx.id.name, to = c.version.raw)
                     }
                 }
-                addLine(factory.join(chips) { factory.smallText("  ") })
+                addLine(factory.join(actions) { factory.smallText("  ") })
                 return true
             }
 
+            // A clickable chip: keep the rounded-background styling, but show a hand cursor on hover.
             private fun chip(text: String, onClick: () -> Unit): InlayPresentation =
-                factory.onClick(factory.roundWithBackground(factory.smallText(text)), MouseButton.Left) { _, _ -> onClick() }
+                factory.withCursorOnHover(
+                    factory.onClick(factory.roundWithBackground(factory.smallText(text)), MouseButton.Left) { _, _ -> onClick() },
+                    Cursor.getPredefinedCursor(Cursor.HAND_CURSOR),
+                )
         }
     }
 
