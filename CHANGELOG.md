@@ -30,6 +30,8 @@ view over `libman.json`.
   indicator; the outcome is still shown as a notification.
 - **Missing-CLI warning**: opening a `libman.json` warns once if the `libman` CLI is not
   installed, with the install command and a shortcut to settings (to set a custom path).
+- **Install LibMan CLI** button in settings: runs `dotnet tool install -g` (no project needed),
+  disabled when the CLI is already found.
 - CLI, network, and provider errors are shown as notifications with a **Copy Details**
   action, never as plugin crashes.
 

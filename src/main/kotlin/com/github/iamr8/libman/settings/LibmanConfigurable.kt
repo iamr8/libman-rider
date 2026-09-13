@@ -1,5 +1,8 @@
 package com.github.iamr8.libman.settings
 
+import com.github.iamr8.libman.cli.DotnetTool
+import com.github.iamr8.libman.cli.LibmanLocator
+import com.github.iamr8.libman.ui.LibmanInstall
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindItem
@@ -61,6 +64,22 @@ class LibmanConfigurable : BoundSearchableConfigurable("LibMan", "com.github.iam
             row("Output verbosity:") {
                 comboBox(LibmanVerbosity.entries)
                     .bindItem({ work.verbosity }, { work.verbosity = it ?: LibmanVerbosity.NORMAL })
+            }
+            row {
+                val cell = button("Install LibMan CLI") {}
+                val btn = cell.component
+                // Enabled only when libman is not already found (custom path, PATH, or ~/.dotnet/tools);
+                // a global install needs no project, so nothing to choose.
+                fun refresh() { btn.isEnabled = LibmanLocator.resolveExisting(work.customLibmanPath.trim()) == null }
+                refresh()
+                btn.addActionListener {
+                    btn.isEnabled = false
+                    LibmanInstall.installCli(null) { refresh() }
+                }
+                cell.comment(
+                    "Installs the global .NET tool: <code>dotnet tool install -g ${DotnetTool.LIBMAN_CLI_PACKAGE}</code>. " +
+                        "Disabled when libman is already found.",
+                )
             }
         }
     }
