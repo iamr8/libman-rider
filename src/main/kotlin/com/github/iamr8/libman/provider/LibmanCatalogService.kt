@@ -18,10 +18,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Caches provider catalog lookups per project so versions aren't re-fetched on every highlight pass.
- * Entries expire after the configured TTL; the "Check for updates" chip and opening the file force a
- * refresh.
+ * Entries expire after the configured TTL; the "Check for updates" link and opening the file force a
+ * refresh. The annotator/inlays render from the cache only (never fetch).
  *
- * `getOrFetch` is blocking and must be called off the EDT (the annotator's `doAnnotate`).
+ * `getOrFetch`/`refreshNow` are blocking and run only inside the visible, cancellable background
+ * tasks below ([sweepOnOpen] and [refreshInBackground]), never on the EDT or the highlighting thread.
  * When fresh data arrives, a debounced daemon restart re-renders the highlight and inlays.
  */
 @Service(Service.Level.PROJECT)
@@ -42,7 +43,7 @@ class LibmanCatalogService(private val project: Project) {
 
     /**
      * Cached-if-fresh, else fetch now (blocking). Off-EDT only. Does NOT trigger a UI refresh -
-     * the caller renders this pass's result and calls [requestRefresh] once if anything was fetched.
+     * the calling task calls [requestRefresh] once it has filled the cache.
      */
     fun getOrFetch(provider: String?, name: String): LibInfo? {
         val k = key(provider, name)

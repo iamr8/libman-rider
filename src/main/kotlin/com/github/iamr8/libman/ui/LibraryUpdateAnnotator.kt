@@ -19,8 +19,10 @@ import java.awt.Color
 /**
  * For each library in a `libman.json`: shows the provider's description as a hover tooltip on the
  * library name (with an "Open on <provider>" link), and highlights the version with a single amber
- * background when any update is available. The network fetch runs in [doAnnotate], which the platform
- * calls off the highlighting thread; results are cached in [LibmanCatalogService].
+ * background when any update is available. This renders from the [LibmanCatalogService] cache only -
+ * it never fetches here. Every network fetch runs in a visible, cancellable background task (the
+ * open-file sweep and the per-library "Check for updates" link), so a cold or expired cache simply
+ * shows nothing until the next check.
  */
 class LibraryUpdateAnnotator :
     DumbAware,
@@ -54,10 +56,11 @@ class LibraryUpdateAnnotator :
     override fun doAnnotate(collectedInfo: Collected): List<Result> {
         val service = LibmanCatalogService.getInstance(collectedInfo.project)
         val includePre = LibmanSettings.getInstance().includePrereleases
-        var fetchedAny = false
-        val results = collectedInfo.entries.flatMap { e ->
-            if (service.getCached(e.provider, e.name) == null) fetchedAny = true
-            val info = service.getOrFetch(e.provider, e.name) ?: return@flatMap emptyList()
+        // Cache-only: never fetch on the highlighting thread. Fetching happens in the visible,
+        // cancellable open-sweep and "Check for updates" tasks, which call requestRefresh() to
+        // re-run this pass once fresh data lands.
+        return collectedInfo.entries.flatMap { e ->
+            val info = service.getCached(e.provider, e.name) ?: return@flatMap emptyList()
             val out = mutableListOf<Result>()
 
             // Description tooltip on the library name.
@@ -75,8 +78,6 @@ class LibraryUpdateAnnotator :
             }
             out
         }
-        if (fetchedAny) service.requestRefresh()
-        return results
     }
 
     override fun apply(file: PsiFile, annotationResult: List<Result>, holder: AnnotationHolder) {

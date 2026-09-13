@@ -1,5 +1,7 @@
 package com.github.iamr8.libman.provider
 
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.util.io.HttpRequests
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -35,7 +37,11 @@ object ProviderCatalog {
                 .accept("application/json")
                 .connectTimeout(TIMEOUT_MS)
                 .readTimeout(TIMEOUT_MS)
-                .readString()
+                // Pass the running task's indicator so the download honors cancel; the read loop only
+                // checks cancellation when the indicator is non-null. It is null off a task (e.g. tests).
+                .readString(ProgressManager.getInstance().progressIndicator)
+        } catch (e: ProcessCanceledException) {
+            throw e // cancellation must propagate so the task stops and is not logged as a failure
         } catch (e: Exception) {
             return null
         }
