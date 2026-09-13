@@ -1,8 +1,10 @@
 package com.github.iamr8.libman.ui
 
 import com.github.iamr8.libman.cli.CliFailures
+import com.github.iamr8.libman.cli.LibmanLocator
 import com.github.iamr8.libman.cli.LibmanResult
 import com.github.iamr8.libman.cli.LibmanRunner
+import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -38,7 +40,13 @@ object LibmanRun {
             private var result: LibmanResult? = null
 
             override fun run(indicator: ProgressIndicator) {
-                val runner = LibmanRunner()
+                val settings = LibmanSettings.getInstance()
+                // Stream each libman output line into the progress indicator (live step text).
+                val runner = LibmanRunner(
+                    libmanPath = LibmanLocator.resolve(settings.customLibmanPath),
+                    verbosity = settings.verbosityArg,
+                    onLine = { line -> indicator.text2 = line },
+                )
                 if (!runner.isInstalled()) {
                     notInstalled = true
                     return

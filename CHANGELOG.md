@@ -21,10 +21,15 @@ view over `libman.json`.
 - **Manifest checks**: a warning on an unknown provider, and a hint when a newer `libman.json`
   schema version is available.
 - **Providers**: cdnjs, unpkg (npm), and jsDelivr (npm + GitHub).
-- **Settings** (Settings | Tools | LibMan): include pre-releases, check-on-open, cache lifetime.
+- **Settings** (Settings | Tools | LibMan): include pre-releases, check-on-open, cache lifetime,
+  a custom `libman` executable path, and CLI output verbosity.
 - **Context-menu actions** on `libman.json` (Solution Explorer + editor): **Restore**,
   **Clean**, **Manage**.
 - **Plugin suggestion**: the IDE suggests this plugin when a `libman.json` is opened.
+- **Live progress**: a running action streams the `libman` output into the background progress
+  indicator; the outcome is still shown as a notification.
+- **Missing-CLI warning**: opening a `libman.json` warns once if the `libman` CLI is not
+  installed, with the install command and a shortcut to settings (to set a custom path).
 - CLI, network, and provider errors are shown as notifications with a **Copy Details**
   action, never as plugin crashes.
 

@@ -22,7 +22,24 @@ object LibmanLocator {
         System.getProperty("user.home")?.let { add(File(it, ".dotnet/tools/${exeName()}").path) }
     }
 
-    /** First existing candidate, or the bare `libman` command as a last resort. */
-    fun resolve(): String =
-        candidates.firstOrNull { it.isNotBlank() && File(it).canExecute() } ?: exeName()
+    /**
+     * The libman executable to run: [customPath] when it points at an executable, else the first
+     * existing well-known candidate, else the bare `libman` command as a last resort (relies on the
+     * process PATH).
+     */
+    fun resolve(customPath: String? = null): String =
+        resolveExisting(customPath) ?: exeName()
+
+    /**
+     * The libman executable if one actually exists (custom path, PATH, or `~/.dotnet/tools`), or
+     * null when only the bare-command fallback remains. Lets callers decide whether an install check
+     * needs an actual process spawn.
+     */
+    fun resolveExisting(customPath: String? = null): String? {
+        if (!customPath.isNullOrBlank()) {
+            val f = File(customPath.trim())
+            if (f.canExecute()) return f.path
+        }
+        return candidates.firstOrNull { it.isNotBlank() && File(it).canExecute() }
+    }
 }

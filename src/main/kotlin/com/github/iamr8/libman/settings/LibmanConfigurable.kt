@@ -1,50 +1,67 @@
 package com.github.iamr8.libman.settings
 
-import com.intellij.openapi.options.Configurable
-import com.intellij.ui.components.JBCheckBox
-import com.intellij.ui.components.JBLabel
-import com.intellij.util.ui.FormBuilder
-import com.intellij.util.ui.JBUI
-import javax.swing.JComponent
-import javax.swing.SpinnerNumberModel
-import javax.swing.JSpinner
+import com.intellij.openapi.options.BoundSearchableConfigurable
+import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.dsl.builder.bindItem
+import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.bindText
+import com.intellij.ui.dsl.builder.columns
+import com.intellij.ui.dsl.builder.panel
+import java.io.File
 
-/** Settings | Tools | LibMan. */
-class LibmanConfigurable : Configurable {
+/** Settings | Tools | LibMan. Persists to the application-level [LibmanSettings]. */
+class LibmanConfigurable : BoundSearchableConfigurable("LibMan", "com.github.iamr8.libman.settings") {
 
-    private val includePrereleases = JBCheckBox("Include pre-release versions")
-    private val checkOnOpen = JBCheckBox("Check for updates when libman.json opens")
-    private val cacheTtl = JSpinner(SpinnerNumberModel(60, 1, 1440, 5))
+    private val settings = LibmanSettings.getInstance()
+    private val work: LibmanSettings.State = settings.getState().copy()
 
-    private val settings get() = LibmanSettings.getInstance()
-
-    override fun getDisplayName(): String = "LibMan"
-
-    override fun createComponent(): JComponent {
-        reset()
-        return FormBuilder.createFormBuilder()
-            .addComponent(includePrereleases)
-            .addComponent(checkOnOpen)
-            .addLabeledComponent(JBLabel("Cache expiry (minutes):"), cacheTtl)
-            .addComponentFillVertically(javax.swing.JPanel(), 0)
-            .panel
-            .apply { border = JBUI.Borders.empty(10) }
-    }
-
-    override fun isModified(): Boolean =
-        includePrereleases.isSelected != settings.includePrereleases ||
-            checkOnOpen.isSelected != settings.checkOnOpen ||
-            (cacheTtl.value as Int) != settings.cacheTtlMinutes
+    override fun isModified(): Boolean = super.isModified() || work != settings.getState()
 
     override fun apply() {
-        settings.includePrereleases = includePrereleases.isSelected
-        settings.checkOnOpen = checkOnOpen.isSelected
-        settings.cacheTtlMinutes = cacheTtl.value as Int
+        super.apply() // write UI -> work
+        work.customLibmanPath = work.customLibmanPath.trim()
+        work.cacheTtlMinutes = work.cacheTtlMinutes.coerceIn(1, 1440)
+        settings.loadState(work.copy())
     }
 
     override fun reset() {
-        includePrereleases.isSelected = settings.includePrereleases
-        checkOnOpen.isSelected = settings.checkOnOpen
-        cacheTtl.value = settings.cacheTtlMinutes
+        work.assignFrom(settings.getState()) // in place: keeps bindings valid
+        super.reset()
+    }
+
+    override fun createPanel(): DialogPanel = panel {
+        group("Updates") {
+            row { checkBox("Include pre-release versions").bindSelected(work::includePrereleases) }
+            row { checkBox("Check for updates when libman.json opens").bindSelected(work::checkOnOpen) }
+            row("Cache expiry (minutes):") {
+                textField()
+                    .bindText(
+                        { work.cacheTtlMinutes.toString() },
+                        { work.cacheTtlMinutes = it.trim().toIntOrNull()?.coerceIn(1, 1440) ?: 60 },
+                    )
+                    .columns(6)
+                    .comment("How long provider version lookups are cached. Check for updates forces a refresh.")
+            }
+        }
+        group("LibMan CLI") {
+            row("Executable path:") {
+                textField()
+                    .bindText(work::customLibmanPath)
+                    .columns(40)
+                    .comment("Leave empty to auto-detect on PATH and in ~/.dotnet/tools.")
+                    .validationOnApply { field ->
+                        val path = field.text.trim()
+                        if (path.isNotEmpty() && !File(path).canExecute()) {
+                            error("Not an executable file. Leave empty to auto-detect.")
+                        } else {
+                            null
+                        }
+                    }
+            }
+            row("Output verbosity:") {
+                comboBox(LibmanVerbosity.entries)
+                    .bindItem({ work.verbosity }, { work.verbosity = it ?: LibmanVerbosity.NORMAL })
+            }
+        }
     }
 }

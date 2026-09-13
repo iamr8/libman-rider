@@ -42,4 +42,39 @@ class LibmanCommandTest {
     @Test fun `update ignores blank to`() {
         assertEquals(listOf(libman, "update", "jquery"), LibmanCommand.update(libman, "jquery", to = "  "))
     }
+
+    // --- verbosity ---
+
+    @Test fun `no verbosity flag by default`() {
+        assertEquals(listOf(libman, "restore"), LibmanCommand.restore(libman))
+        assertEquals(listOf(libman, "clean"), LibmanCommand.clean(libman))
+        assertEquals(listOf(libman, "uninstall", "jquery"), LibmanCommand.uninstall(libman, "jquery"))
+        assertEquals(listOf(libman, "update", "jquery"), LibmanCommand.update(libman, "jquery"))
+    }
+
+    @Test fun `blank verbosity is omitted`() {
+        assertEquals(listOf(libman, "restore"), LibmanCommand.restore(libman, verbosity = "  "))
+    }
+
+    @Test fun `verbosity appended to restore`() {
+        assertEquals(listOf(libman, "restore", "--verbosity", "detailed"), LibmanCommand.restore(libman, "detailed"))
+    }
+
+    @Test fun `verbosity appended to clean`() {
+        assertEquals(listOf(libman, "clean", "--verbosity", "quiet"), LibmanCommand.clean(libman, "quiet"))
+    }
+
+    @Test fun `verbosity appended to uninstall`() {
+        assertEquals(
+            listOf(libman, "uninstall", "jquery", "--verbosity", "quiet"),
+            LibmanCommand.uninstall(libman, "jquery", "quiet"),
+        )
+    }
+
+    @Test fun `verbosity appended after update flags`() {
+        assertEquals(
+            listOf(libman, "update", "jquery", "--pre", "--to", "3.7.1", "--verbosity", "detailed"),
+            LibmanCommand.update(libman, "jquery", pre = true, to = "3.7.1", verbosity = "detailed"),
+        )
+    }
 }

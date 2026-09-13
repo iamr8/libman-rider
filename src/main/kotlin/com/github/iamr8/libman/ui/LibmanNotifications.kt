@@ -1,11 +1,13 @@
 package com.github.iamr8.libman.ui
 
 import com.github.iamr8.libman.cli.CliFailures
+import com.github.iamr8.libman.settings.LibmanConfigurable
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
 
@@ -27,8 +29,19 @@ object LibmanNotifications {
         n.notify(project)
     }
 
+    /**
+     * The libman CLI is missing (or the configured path is wrong). A warning with the install
+     * command and a shortcut to the settings page (where a custom executable path can be set).
+     */
     fun notInstalled(project: Project?) {
-        info(project, "LibMan", CliFailures.NOT_INSTALLED)
+        val n = group().createNotification("LibMan CLI not found", CliFailures.NOT_INSTALLED, NotificationType.WARNING)
+        n.addAction(NotificationAction.createSimple("Copy install command") {
+            CopyPasteManager.getInstance().setContents(StringSelection(CliFailures.INSTALL_COMMAND))
+        })
+        n.addAction(NotificationAction.createSimple("Open settings") {
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, LibmanConfigurable::class.java)
+        })
+        n.notify(project)
     }
 
     /** Adds an action to an info balloon (e.g. an "Update" button after a check). */
