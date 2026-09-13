@@ -1,0 +1,21 @@
+## Summary
+What does this PR change and why?
+
+Closes #
+
+## Changes
+-
+
+## Testing
+- [ ] `./gradlew test` passes
+- [ ] Verified in a sandbox IDE (`./gradlew runIde`) / installed build
+- Steps taken:
+
+## Checklist
+- [ ] Logic is unit-tested where practical (SemVer, update buckets, catalog parsers, manifest rules)
+- [ ] `CHANGELOG.md` updated under the current version section (matching `VERSION`, e.g. `## [0.1.0]`)
+- [ ] No unrelated changes / formatting churn
+- [ ] Matches existing code style
+
+## Screenshots
+If UI-facing, include before/after.
