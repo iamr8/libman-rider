@@ -16,12 +16,14 @@ import com.intellij.codeInsight.hints.InlayHintsSink
 import com.intellij.codeInsight.hints.NoSettings
 import com.intellij.codeInsight.hints.SettingsKey
 import com.intellij.codeInsight.hints.presentation.InlayPresentation
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.ui.Messages
 import com.intellij.json.psi.JsonObject
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import javax.swing.Icon
 import javax.swing.JPanel
 
 /**
@@ -73,13 +75,13 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                 }
 
                 val links = mutableListOf<InlayPresentation>()
-                links += link("↻ Check for updates") { service.refreshInBackground(ctx.provider, ctx.id.name) }
+                links += link(AllIcons.Actions.Refresh, "Check for updates") { service.refreshInBackground(ctx.provider, ctx.id.name) }
                 val candidates = buckets?.candidates().orEmpty()
                 candidates.forEach { c ->
                     val label = UpdateLabel.chip(c.version.raw, c.kind.label, single = candidates.size == 1)
-                    links += link(label) { LibmanOps.update(project, ctx.manifestDir, ctx.id.name, to = c.version.raw) }
+                    links += link(AllIcons.Actions.Download, label) { LibmanOps.update(project, ctx.manifestDir, ctx.id.name, to = c.version.raw) }
                 }
-                links += link("Remove") {
+                links += link(AllIcons.General.Remove, "Remove") {
                     // Remove deletes the library's files; confirm before the destructive step.
                     val confirmed = Messages.showYesNoDialog(
                         project,
@@ -95,9 +97,11 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                 return true
             }
 
-            // A background-free clickable link: hand cursor + underline on hover (via referenceOnHover).
-            private fun link(text: String, onClick: () -> Unit): InlayPresentation =
-                factory.referenceOnHover(factory.smallText(text)) { _, _ -> onClick() }
+            // A background-free clickable link (icon + label): hand cursor + underline on hover.
+            private fun link(icon: Icon, text: String, onClick: () -> Unit): InlayPresentation =
+                factory.referenceOnHover(
+                    factory.seq(factory.icon(icon), factory.smallText(" $text")),
+                ) { _, _ -> onClick() }
         }
     }
 }

@@ -30,10 +30,10 @@ class LibmanSettings : PersistentStateComponent<LibmanSettings.State> {
         get() = state.checkOnOpen
         set(v) { state.checkOnOpen = v }
 
-    /** Cache lifetime in minutes; clamped to at least 1. */
+    /** Cache lifetime in minutes; clamped to the settings spinner's range (1..1440). */
     var cacheTtlMinutes: Int
-        get() = state.cacheTtlMinutes.coerceAtLeast(1)
-        set(v) { state.cacheTtlMinutes = v.coerceAtLeast(1) }
+        get() = state.cacheTtlMinutes.coerceIn(1, 1440)
+        set(v) { state.cacheTtlMinutes = v.coerceIn(1, 1440) }
 
     companion object {
         fun getInstance(): LibmanSettings = service()
