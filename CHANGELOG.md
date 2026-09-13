@@ -13,6 +13,9 @@ view over `libman.json`.
 - **Inline updates**: opening `libman.json` force-checks each library for updates (cancelled if
   the file is closed; results cached with a configurable expiry). The version gets an amber
   highlight when a newer version exists.
+- **Cancellable checks**: every update check - on file open and per library - runs as a background
+  task in Rider's Background Tasks pane and can be cancelled mid-download. The editor view renders
+  from the cache only, so it never blocks the highlighting thread on the network.
 - **Action row** above each library line: **Check for updates**, one **Update to X** per
   available version (patch / minor / major / pre-release), and **Remove** (runs
   `libman uninstall` after a confirm). Each link has an icon and a hand cursor.

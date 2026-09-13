@@ -43,7 +43,10 @@ class LibmanConfigurable : BoundSearchableConfigurable("LibMan", "com.github.iam
                         { work.cacheTtlMinutes = it.trim().toIntOrNull()?.coerceIn(1, 1440) ?: 60 },
                     )
                     .columns(6)
-                    .comment("How long provider version lookups are cached. Check for updates forces a refresh.")
+                    .comment(
+                        "How long provider version lookups are cached. After this, the update marks clear " +
+                            "until the next check (reopen the file or use Check for updates).",
+                    )
             }
         }
         group("LibMan CLI") {
