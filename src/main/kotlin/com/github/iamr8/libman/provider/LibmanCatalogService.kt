@@ -2,6 +2,7 @@ package com.github.iamr8.libman.provider
 
 import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
+import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.Service
@@ -105,7 +106,15 @@ class LibmanCatalogService(private val project: Project) {
         if (!refreshPending.compareAndSet(false, true)) return
         ApplicationManager.getApplication().invokeLater({
             refreshPending.set(false)
-            if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart()
+            if (!project.isDisposed) {
+                // The inlay pass skips work when the PSI modification stamp is unchanged (see
+                // InlayHintsPassFactoryInternal.createHighlightingPass). Our fetch fills the cache
+                // without editing the file, so a plain daemon restart re-runs the annotator (recolors
+                // the version) but leaves the "Update to X" inlay stale. Clearing the stamp in the
+                // same EDT transaction as the restart forces the inlay to recompute too.
+                InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
+                DaemonCodeAnalyzer.getInstance(project).restart()
+            }
         }, ModalityState.any())
     }
 
