@@ -81,7 +81,8 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                     val label = UpdateLabel.chip(c.version.raw, c.kind.label, single = candidates.size == 1)
                     links += link(AllIcons.Actions.Download, label) { LibmanOps.update(project, ctx.manifestDir, ctx.id.name, to = c.version.raw) }
                 }
-                links += link(AllIcons.General.Remove, "Remove") {
+                // AllIcons.Actions.GC is the trash-bin glyph (expui/general/delete.svg).
+                links += link(AllIcons.Actions.GC, "Remove") {
                     // Remove deletes the library's files; confirm before the destructive step.
                     val confirmed = Messages.showYesNoDialog(
                         project,
@@ -98,9 +99,12 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
             }
 
             // A background-free clickable link (icon + label): hand cursor + underline on hover.
+            // smallScaledIcon scales the icon to the small-text metrics and adds the same top/down
+            // inset as smallText, so the icon and label share one baseline (plain icon() renders at
+            // full size and sits lower than the small text).
             private fun link(icon: Icon, text: String, onClick: () -> Unit): InlayPresentation =
                 factory.referenceOnHover(
-                    factory.seq(factory.icon(icon), factory.smallText(" $text")),
+                    factory.seq(factory.smallScaledIcon(icon), factory.smallText(" $text")),
                 ) { _, _ -> onClick() }
         }
     }

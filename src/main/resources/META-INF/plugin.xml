@@ -35,6 +35,9 @@
         <code>dotnet tool install -g Microsoft.Web.LibraryManager.Cli</code>.</p>
 
         <p>Source &amp; issues: <a href="https://github.com/iamr8/libman-rider">github.com/iamr8/libman-rider</a></p>
+
+        <p><em>Not affiliated with or endorsed by Microsoft. LibMan and Library Manager are names of
+        the Microsoft tool this plugin integrates.</em></p>
     ]]></description>
 
     <change-notes><![CDATA[
@@ -78,6 +81,17 @@
 
         <!-- Advertise the plugin to users whose projects reference LibMan's build package. -->
         <dependencySupport kind="dotnet" coordinate="Microsoft.Web.LibraryManager.Build" displayName="NuGet"/>
+
+        <!-- Bind the exact name libman.json to a JSON-language file type. The Marketplace indexes this
+             type's fileNames, so the IDE's plugin advertiser suggests this plugin when a user opens a
+             libman.json. The class extends LanguageFileType(JsonLanguage), so the file keeps JSON
+             parsing / schema / our JSON-language features. No `language` attribute: that declares the
+             PRIMARY type for a language, and JSON's primary stays JsonFileType. -->
+        <fileType
+            name="LibMan Configuration"
+            implementationClass="com.github.iamr8.libman.LibManJsonFileType"
+            fieldName="INSTANCE"
+            fileNames="libman.json"/>
     </extensions>
 
     <projectListeners>
