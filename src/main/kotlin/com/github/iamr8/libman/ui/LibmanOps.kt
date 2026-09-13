@@ -21,6 +21,7 @@ object LibmanOps {
             title = if (to != null) "Installing $name@$to" else "Updating $name",
             op = "update",
             manifestDir = manifestDir,
+            key = libraryKey(manifestDir, name),
             action = { it.update(manifestDir, name, pre, to) },
             // libman exits 0 even for a no-op or a missing library, so read the outcome from stdout.
             onOk = { r ->
@@ -43,6 +44,7 @@ object LibmanOps {
             title = "Uninstalling $name",
             op = "uninstall",
             manifestDir = manifestDir,
+            key = libraryKey(manifestDir, name),
             action = { it.uninstall(manifestDir, name) },
             onOk = { r ->
                 when (OpResultParser.parseUninstall(r.stdout)) {
@@ -63,6 +65,7 @@ object LibmanOps {
             title = "Restoring client-side libraries",
             op = "restore",
             manifestDir = manifestDir,
+            key = manifestKey(manifestDir),
             action = { it.restore(manifestDir) },
             onOk = { LibmanNotifications.info(project, "LibMan", "Client-side libraries restored.") },
         )
@@ -75,8 +78,15 @@ object LibmanOps {
             title = "Cleaning client-side libraries",
             op = "clean",
             manifestDir = manifestDir,
+            key = manifestKey(manifestDir),
             action = { it.clean(manifestDir) },
             onOk = { LibmanNotifications.info(project, "LibMan", "Client-side libraries cleaned.") },
         )
     }
+
+    // NUL separator can't appear in a path or a library name, so keys never collide.
+    private fun libraryKey(manifestDir: String, name: String): String = "$manifestDir\u0000$name"
+
+    // Whole-manifest ops (restore/clean) share one key, so they never overlap on the same manifest.
+    private fun manifestKey(manifestDir: String): String = "$manifestDir\u0000"
 }
