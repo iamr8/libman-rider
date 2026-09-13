@@ -26,12 +26,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Test, verify & build
-        # -Dorg.gradle.java.home overrides the machine-specific value in gradle.properties.
-        run: ./gradlew test verifyPluginProjectConfiguration verifyPluginStructure buildPlugin -Dorg.gradle.java.home="$JAVA_HOME" --stacktrace
+        run: ./gradlew test verifyPluginProjectConfiguration verifyPluginStructure buildPlugin --stacktrace
 
       # Compatibility check at PR time, against the current Rider only (one IDE download).
       - name: Verify plugin compatibility (current Rider)
-        run: ./gradlew verifyPlugin -PverifierIdes=current -Dorg.gradle.java.home="$JAVA_HOME" --stacktrace
+        run: ./gradlew verifyPlugin -PverifierIdes=current --stacktrace
 
       - name: Upload verifier report
         if: failure()
@@ -101,7 +100,7 @@ jobs:
 
       - name: Build EAP plugin
         # verifyPluginStructure catches a bad EAP version string here (cheap, no IDE download).
-        run: ./gradlew verifyPluginStructure buildPlugin -PpluginVersion="${{ steps.ver.outputs.eap }}" -Dorg.gradle.java.home="$JAVA_HOME" --stacktrace
+        run: ./gradlew verifyPluginStructure buildPlugin -PpluginVersion="${{ steps.ver.outputs.eap }}" --stacktrace
 
       - name: Collect PRs since last release
         id: prs
