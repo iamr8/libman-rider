@@ -1,6 +1,5 @@
 package com.github.iamr8.libman.ui
 
-import com.github.iamr8.libman.model.SeverityColor
 import com.github.iamr8.libman.model.UpdateBuckets
 import com.github.iamr8.libman.provider.LibmanCatalogService
 import com.github.iamr8.libman.provider.ProviderCatalog
@@ -16,9 +15,10 @@ import com.intellij.ui.JBColor
 import java.awt.Color
 
 /**
- * Colors the version inside each `library` value of a `libman.json` by the biggest available update
- * (green=patch, yellow=minor, red=major/prerelease). Runs the network fetch in [doAnnotate], which
- * the platform calls off the highlighting thread; results are cached in [LibmanCatalogService].
+ * Highlights the version inside each `library` value of a `libman.json` with a single amber
+ * background when any update is available (no per-severity colors). Runs the network fetch in
+ * [doAnnotate], which the platform calls off the highlighting thread; results are cached in
+ * [LibmanCatalogService].
  */
 class LibraryUpdateAnnotator :
     DumbAware,
@@ -33,7 +33,7 @@ class LibraryUpdateAnnotator :
 
     data class Collected(val project: Project, val entries: List<Entry>)
 
-    data class Result(val range: TextRange, val color: SeverityColor, val tooltip: String)
+    data class Result(val range: TextRange, val tooltip: String)
 
     override fun collectInformation(file: PsiFile): Collected? {
         if (!ManifestPsi.isManifest(file)) return null
@@ -59,7 +59,7 @@ class LibraryUpdateAnnotator :
             val buckets = UpdateBuckets.compute(e.version, info.versions, includePrerelease = true)
             if (!buckets.hasAny()) return@mapNotNull null
             val tip = buckets.candidates().joinToString(", ") { "${it.version.raw} (${it.kind.label})" }
-            Result(e.versionRange, buckets.highestColor(), "LibMan: update available - $tip")
+            Result(e.versionRange, "LibMan: update available - $tip")
         }
         if (fetchedAny) service.requestRefresh()
         return results
@@ -67,20 +67,17 @@ class LibraryUpdateAnnotator :
 
     override fun apply(file: PsiFile, annotationResult: List<Result>, holder: AnnotationHolder) {
         for (r in annotationResult) {
-            val bg = backgroundFor(r.color) ?: continue
             // Silent: a pure background color with a hover tooltip, not a Problems-view entry.
             holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
                 .range(r.range)
-                .enforcedTextAttributes(TextAttributes().apply { backgroundColor = bg })
+                .enforcedTextAttributes(TextAttributes().apply { backgroundColor = UPDATE_BG })
                 .tooltip(r.tooltip)
                 .create()
         }
     }
 
-    private fun backgroundFor(color: SeverityColor): Color? = when (color) {
-        SeverityColor.RED -> JBColor(Color(0xFF, 0xE3, 0xE3), Color(0x5C, 0x3A, 0x3A))
-        SeverityColor.YELLOW -> JBColor(Color(0xFF, 0xF3, 0xD6), Color(0x5C, 0x52, 0x38))
-        SeverityColor.GREEN -> JBColor(Color(0xE5, 0xF5, 0xE6), Color(0x36, 0x5C, 0x3C))
-        SeverityColor.NONE -> null
+    companion object {
+        // A single amber/tan highlight for "an update is available" (light / dark).
+        private val UPDATE_BG: Color = JBColor(Color(0xFF, 0xF3, 0xD6), Color(0x5C, 0x52, 0x38))
     }
 }
