@@ -3,6 +3,7 @@ package com.github.iamr8.libman.ui
 import com.github.iamr8.libman.model.UpdateBuckets
 import com.github.iamr8.libman.provider.LibmanCatalogService
 import com.github.iamr8.libman.provider.ProviderCatalog
+import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.ExternalAnnotator
 import com.intellij.lang.annotation.HighlightSeverity
@@ -10,15 +11,16 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiFile
 import com.intellij.ui.JBColor
 import java.awt.Color
 
 /**
- * Highlights the version inside each `library` value of a `libman.json` with a single amber
- * background when any update is available (no per-severity colors). Runs the network fetch in
- * [doAnnotate], which the platform calls off the highlighting thread; results are cached in
- * [LibmanCatalogService].
+ * For each library in a `libman.json`: shows the provider's description as a hover tooltip on the
+ * library name (with an "Open on <provider>" link), and highlights the version with a single amber
+ * background when any update is available. The network fetch runs in [doAnnotate], which the platform
+ * calls off the highlighting thread; results are cached in [LibmanCatalogService].
  */
 class LibraryUpdateAnnotator :
     DumbAware,
@@ -27,39 +29,51 @@ class LibraryUpdateAnnotator :
     data class Entry(
         val provider: String?,
         val name: String,
-        val version: String,
-        val versionRange: TextRange,
+        val version: String?,
+        val versionRange: TextRange?,
+        val nameRange: TextRange,
     )
 
     data class Collected(val project: Project, val entries: List<Entry>)
 
-    data class Result(val range: TextRange, val tooltip: String)
+    /** A single annotation: a hover tooltip, optionally with the amber "update" background. */
+    data class Result(val range: TextRange, val tooltip: String, val highlight: Boolean)
 
     override fun collectInformation(file: PsiFile): Collected? {
         if (!ManifestPsi.isManifest(file)) return null
         // collectInformation is called by the platform inside a read action.
         val entries = ManifestPsi.libraryObjects(file).mapNotNull { obj ->
             val ctx = ManifestPsi.contextOf(obj, file) ?: return@mapNotNull null
-            val version = ctx.id.version ?: return@mapNotNull null
             if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
-            val range = ManifestPsi.versionRange(obj, ctx) ?: return@mapNotNull null
-            Entry(ctx.provider, ctx.id.name, version, range)
+            val nameRange = ManifestPsi.nameRange(obj, ctx) ?: return@mapNotNull null
+            Entry(ctx.provider, ctx.id.name, ctx.id.version, ManifestPsi.versionRange(obj, ctx), nameRange)
         }
         return if (entries.isEmpty()) null else Collected(file.project, entries)
     }
 
     override fun doAnnotate(collectedInfo: Collected): List<Result> {
         val service = LibmanCatalogService.getInstance(collectedInfo.project)
+        val includePre = LibmanSettings.getInstance().includePrereleases
         var fetchedAny = false
-        val results = collectedInfo.entries.mapNotNull { e ->
-            // A cache miss means this pass performs a network fetch; note it so we can trigger a
-            // single re-render at the end (which lets the inlay pass pick up the now-filled cache).
+        val results = collectedInfo.entries.flatMap { e ->
             if (service.getCached(e.provider, e.name) == null) fetchedAny = true
-            val info = service.getOrFetch(e.provider, e.name) ?: return@mapNotNull null
-            val buckets = UpdateBuckets.compute(e.version, info.versions, includePrerelease = true)
-            if (!buckets.hasAny()) return@mapNotNull null
-            val tip = buckets.candidates().joinToString(", ") { "${it.version.raw} (${it.kind.label})" }
-            Result(e.versionRange, "LibMan: update available - $tip")
+            val info = service.getOrFetch(e.provider, e.name) ?: return@flatMap emptyList()
+            val out = mutableListOf<Result>()
+
+            // Description tooltip on the library name.
+            nameTooltip(info.description, ProviderCatalog.pageUrl(e.provider, e.name), e.provider)?.let {
+                out += Result(e.nameRange, it, highlight = false)
+            }
+
+            // Amber highlight on the version when an update exists.
+            if (e.version != null && e.versionRange != null) {
+                val buckets = UpdateBuckets.compute(e.version, info.versions, includePre)
+                if (buckets.hasAny()) {
+                    val tip = buckets.candidates().joinToString(", ") { "${it.version.raw} (${it.kind.label})" }
+                    out += Result(e.versionRange, "LibMan: update available - $tip", highlight = true)
+                }
+            }
+            out
         }
         if (fetchedAny) service.requestRefresh()
         return results
@@ -67,13 +81,34 @@ class LibraryUpdateAnnotator :
 
     override fun apply(file: PsiFile, annotationResult: List<Result>, holder: AnnotationHolder) {
         for (r in annotationResult) {
-            // Silent: a pure background color with a hover tooltip, not a Problems-view entry.
-            holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
+            // Silent: never a Problems-view entry; just a hover tooltip (plus the amber background
+            // on version ranges).
+            val builder = holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
                 .range(r.range)
-                .enforcedTextAttributes(TextAttributes().apply { backgroundColor = UPDATE_BG })
                 .tooltip(r.tooltip)
-                .create()
+            if (r.highlight) {
+                builder.enforcedTextAttributes(TextAttributes().apply { backgroundColor = UPDATE_BG })
+            }
+            builder.create()
         }
+    }
+
+    private fun nameTooltip(description: String?, url: String?, provider: String?): String? {
+        val desc = description?.trim().orEmpty()
+        if (desc.isEmpty() && url == null) return null
+        val sb = StringBuilder("<html>")
+        if (desc.isNotEmpty()) sb.append(StringUtil.escapeXmlEntities(desc))
+        if (url != null) {
+            if (desc.isNotEmpty()) sb.append("<br/><br/>")
+            sb.append("<a href=\"").append(url).append("\">Open on ").append(providerLabel(provider)).append(" ↗</a>")
+        }
+        return sb.append("</html>").toString()
+    }
+
+    private fun providerLabel(provider: String?): String = when (provider?.trim()?.lowercase()) {
+        "unpkg" -> "npm"
+        "jsdelivr" -> "jsDelivr"
+        else -> "cdnjs"
     }
 
     companion object {

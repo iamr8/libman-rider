@@ -6,7 +6,7 @@ import com.github.iamr8.libman.cli.UpdateOutcome
 import com.intellij.openapi.project.Project
 
 /**
- * The user-facing LibMan operations, shared by the editor intentions and the context-menu actions.
+ * The user-facing LibMan operations, shared by the inline action links and the context-menu actions.
  * Each runs off the EDT via [LibmanRun] and reports through [LibmanNotifications].
  */
 object LibmanOps {

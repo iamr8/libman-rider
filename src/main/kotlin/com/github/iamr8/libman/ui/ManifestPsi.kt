@@ -82,6 +82,19 @@ object ManifestPsi {
         return TextRange(contentStart + at + 1, contentStart + content.length)
     }
 
+    /**
+     * TextRange of the name portion of the `library` value (before the version's `@`), or the whole
+     * value when there is no version. Used to anchor the description hover tooltip on the name.
+     */
+    fun nameRange(obj: JsonObject, ctx: LibraryEntryContext): TextRange? {
+        val literal = libraryValueLiteral(obj) ?: return null
+        val content = ctx.id.raw
+        val contentStart = literal.textRange.startOffset + 1
+        val at = if (ctx.id.version != null && !ctx.isFilesystem) content.lastIndexOf('@') else -1
+        val nameEnd = if (at > 0) at else content.length
+        return TextRange(contentStart, contentStart + nameEnd)
+    }
+
     private fun enclosingLibraryObject(start: PsiElement?): JsonObject? {
         var e: PsiElement? = start
         while (e != null) {

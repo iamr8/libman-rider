@@ -11,20 +11,22 @@
         fills that gap by wrapping the official
         <a href="https://learn.microsoft.com/aspnet/core/client-side/libman/libman-cli">libman</a> CLI.</p>
 
-        <p>Open a <code>libman.json</code> and every library is checked for updates (results are
-        cached). For each library you get, right in the editor:</p>
+        <p>Open a <code>libman.json</code> and every library is checked for updates. For each library
+        you get, right in the editor:</p>
         <ul>
-          <li><b>A colored version highlight</b> - green for a patch, yellow for a minor, red for a
-              major or pre-release update.</li>
-          <li><b>Clickable version chips above the line</b> - one per available update
-              (patch / minor / major / pre-release); click to install it. A <b>Check for updates</b>
-              chip re-checks and refreshes the cache on demand.</li>
-          <li><b>A short description</b> from the provider (cdnjs, npm/unpkg, jsDelivr), with a link
-              to the library's page.</li>
+          <li><b>An amber version highlight</b> when a newer version exists.</li>
+          <li><b>A clickable action row above the line</b> - <b>Check for updates</b>, one
+              <b>Update to X</b> per available version (patch / minor / major / pre-release), and
+              <b>Remove</b> (runs <code>libman uninstall</code>).</li>
+          <li><b>A description tooltip</b> on the library name, from the provider (cdnjs, npm/unpkg,
+              jsDelivr), with a link to the library's page.</li>
+          <li><b>Manifest checks</b> - a warning on an unknown provider, and a hint when a newer
+              <code>libman.json</code> schema version is available.</li>
         </ul>
 
-        <p><b>Context-menu actions</b> on <code>libman.json</code> (Solution Explorer and editor):
-        <b>Restore</b>, <b>Clean</b>, and <b>Manage</b>; plus <b>Uninstall</b> on Alt+Enter.</p>
+        <p>Configure pre-releases, check-on-open and the cache lifetime in
+        <b>Settings | Tools | LibMan</b>. <b>Context-menu actions</b> on <code>libman.json</code>
+        (Solution Explorer and editor): <b>Restore</b>, <b>Clean</b>, and <b>Manage</b>.</p>
 
         <p>CLI failures (missing tool, network, provider errors) are shown as notifications with a
         <b>Copy Details</b> action - never as plugin crashes.</p>
@@ -41,7 +43,7 @@
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
-    <!-- libman.json is JSON; the intentions read/edit it via the bundled JSON PSI. -->
+    <!-- libman.json is JSON; the plugin reads/edits it via the bundled JSON PSI. -->
     <depends>com.intellij.modules.json</depends>
 
     <extensions defaultExtensionNs="com.intellij">
@@ -61,20 +63,29 @@
             language="JSON"
             implementationClass="com.github.iamr8.libman.ui.ManifestValidationAnnotator"/>
 
-        <!-- Block above each library line: description + provider link + clickable version chips. -->
+        <!-- Action row above each library line: Check for updates + Update to X + Remove. -->
         <codeInsight.inlayProvider
             language="JSON"
             implementationClass="com.github.iamr8.libman.ui.LibraryInlayProvider"/>
 
-        <!-- Alt+Enter: uninstall a library entry (self-gated via isAvailable). -->
-        <intentionAction>
-            <className>com.github.iamr8.libman.ui.intentions.UninstallLibraryIntention</className>
-            <category>LibMan</category>
-        </intentionAction>
+        <!-- Settings | Tools | LibMan (prereleases, check-on-open, cache TTL). The settings class is
+             a @Service, so it registers itself; only the Configurable UI needs an entry here. -->
+        <applicationConfigurable
+            parentId="tools"
+            id="com.github.iamr8.libman.settings"
+            displayName="LibMan"
+            instance="com.github.iamr8.libman.settings.LibmanConfigurable"/>
 
         <!-- Advertise the plugin to users whose projects reference LibMan's build package. -->
         <dependencySupport kind="dotnet" coordinate="Microsoft.Web.LibraryManager.Build" displayName="NuGet"/>
     </extensions>
+
+    <projectListeners>
+        <!-- Force-check all libraries when libman.json opens; cancel the check when it closes. -->
+        <listener
+            class="com.github.iamr8.libman.ui.LibmanFileOpenListener"
+            topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </projectListeners>
 
     <actions>
         <group id="com.github.iamr8.libman.LibmanGroup"
