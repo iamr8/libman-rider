@@ -10,9 +10,11 @@ package com.github.iamr8.libman.cli
  */
 object CliFailures {
 
+    /** The command that installs the LibMan CLI global tool. */
+    const val INSTALL_COMMAND = "dotnet tool install -g Microsoft.Web.LibraryManager.Cli"
+
     /** Message shown when the CLI itself is missing. */
-    const val NOT_INSTALLED =
-        "LibMan CLI not found. Install it with: dotnet tool install -g Microsoft.Web.LibraryManager.Cli"
+    const val NOT_INSTALLED = "LibMan CLI not found. Install it with: $INSTALL_COMMAND"
 
     private val LIB_CODE_LINE = Regex("""\[LIB\d+]:?\s*(.*)""")
 
