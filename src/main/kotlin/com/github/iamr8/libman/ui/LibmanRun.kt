@@ -1,6 +1,7 @@
 package com.github.iamr8.libman.ui
 
 import com.github.iamr8.libman.cli.CliFailures
+import com.github.iamr8.libman.cli.InFlightGuard
 import com.github.iamr8.libman.cli.LibmanLocator
 import com.github.iamr8.libman.cli.LibmanResult
 import com.github.iamr8.libman.cli.LibmanRunner
@@ -27,14 +28,20 @@ object LibmanRun {
      * @param op short verb for messages, e.g. "restore", "update".
      * @param title the progress/notification title (usually including the library name).
      */
+    // One operation per key at a time (key = manifest + library, or manifest + whole-manifest op).
+    // A second click while an operation is running is ignored, so a double-click can't run twice.
+    private val inFlight = InFlightGuard()
+
     fun run(
         project: Project,
         title: String,
         op: String,
         manifestDir: String,
+        key: String,
         action: (LibmanRunner) -> LibmanResult,
         onOk: (LibmanResult) -> Unit,
     ) {
+        if (!inFlight.tryAcquire(key)) return // an operation for this key is already running
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             private var notInstalled = false
             private var result: LibmanResult? = null
@@ -75,6 +82,11 @@ object LibmanRun {
 
             override fun onThrowable(error: Throwable) {
                 LOG.error("LibMan $op failed unexpectedly", error)
+            }
+
+            // Runs after onSuccess / onThrowable / cancel — always release the key here.
+            override fun onFinished() {
+                inFlight.release(key)
             }
         })
     }

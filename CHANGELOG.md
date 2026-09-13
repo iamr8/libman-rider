@@ -28,6 +28,8 @@ view over `libman.json`.
 - **Plugin suggestion**: the IDE suggests this plugin when a `libman.json` is opened.
 - **Live progress**: a running action streams the `libman` output into the background progress
   indicator; the outcome is still shown as a notification.
+- **No double-runs**: a second action for a library is ignored while one is already running, so a
+  double-click can't run `libman` twice.
 - **Missing-CLI warning**: opening a `libman.json` warns once if the `libman` CLI is not
   installed, with the install command and a shortcut to settings (to set a custom path).
 - CLI, network, and provider errors are shown as notifications with a **Copy Details**
