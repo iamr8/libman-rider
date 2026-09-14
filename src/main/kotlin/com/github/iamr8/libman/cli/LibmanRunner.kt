@@ -2,8 +2,8 @@ package com.github.iamr8.libman.cli
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
-import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
 import java.nio.charset.StandardCharsets
 
@@ -67,7 +67,7 @@ class LibmanRunner(
         if (workDir != null) commandLine.setWorkDirectory(workDir)
         val handler = CapturingProcessHandler(commandLine)
         onLine?.let { cb ->
-            handler.addProcessListener(object : ProcessAdapter() {
+            handler.addProcessListener(object : ProcessListener {
                 override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
                     val line = event.text.trim()
                     if (line.isNotEmpty()) cb(line)

@@ -7,10 +7,10 @@ import com.github.iamr8.libman.provider.ProviderCatalog
 import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,13 +61,15 @@ class LibmanFileOpenListener : FileEditorManagerListener {
     }
 
     private fun readEntries(project: Project, file: VirtualFile): List<Pair<String?, String>> =
-        ReadAction.compute<List<Pair<String?, String>>, RuntimeException> {
-            if (project.isDisposed) return@compute emptyList()
-            val psi = PsiManager.getInstance(project).findFile(file) ?: return@compute emptyList()
-            ManifestPsi.libraryObjects(psi).mapNotNull { obj ->
-                val ctx = ManifestPsi.contextOf(obj, psi) ?: return@mapNotNull null
-                if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
-                ctx.provider to ctx.id.name
-            }
-        }
+        ApplicationManager.getApplication().runReadAction(
+            ThrowableComputable<List<Pair<String?, String>>, RuntimeException> {
+                if (project.isDisposed) return@ThrowableComputable emptyList()
+                val psi = PsiManager.getInstance(project).findFile(file) ?: return@ThrowableComputable emptyList()
+                ManifestPsi.libraryObjects(psi).mapNotNull { obj ->
+                    val ctx = ManifestPsi.contextOf(obj, psi) ?: return@mapNotNull null
+                    if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
+                    ctx.provider to ctx.id.name
+                }
+            },
+        )
 }
