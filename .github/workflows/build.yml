@@ -1,9 +1,20 @@
 name: Build
 
+# Skip build + verify (+ EAP) when a change touches only docs. Any non-doc file still triggers a
+# full run. Not a required check, so a skipped docs-only PR still merges. workflow_dispatch always
+# runs (no path filter).
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
   workflow_dispatch:
 
 permissions:
