@@ -1,5 +1,9 @@
 # LibMan for Rider
 
+[![JetBrains Marketplace](https://img.shields.io/jetbrains/plugin/v/34253?label=Marketplace)](https://plugins.jetbrains.com/plugin/34253-libman-gui)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/34253)](https://plugins.jetbrains.com/plugin/34253-libman-gui)
+[![Build](https://github.com/iamr8/libman-rider/actions/workflows/build.yml/badge.svg)](https://github.com/iamr8/libman-rider/actions/workflows/build.yml)
+
 Bring Visual Studio's **Library Manager (LibMan)** experience to JetBrains Rider. Manage
 client-side libraries in `libman.json` without leaving the editor: check for updates, update to a
 newer version, remove, restore, and clean - backed by the official
@@ -35,6 +39,12 @@ Also:
 - The IDE **suggests this plugin** when you open a `libman.json`.
 - CLI, network, and provider errors are shown as notifications with a **Copy Details**
   action - not as plugin crashes.
+
+## Install
+
+From the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/34253-libman-gui): in Rider,
+open **Settings | Plugins | Marketplace**, search **LibMan**, and click **Install**. The IDE also
+suggests the plugin the first time you open a `libman.json`.
 
 ## Requirements
 
