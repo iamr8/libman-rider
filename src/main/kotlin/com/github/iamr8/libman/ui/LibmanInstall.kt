@@ -4,6 +4,8 @@ import com.github.iamr8.libman.cli.DotnetTool
 import com.github.iamr8.libman.cli.LibmanResult
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
@@ -31,9 +33,9 @@ object LibmanInstall {
                 val commandLine = GeneralCommandLine(DotnetTool.installLibmanCli())
                     .withCharset(StandardCharsets.UTF_8)
                 val handler = CapturingProcessHandler(commandLine)
-                handler.addProcessListener(object : com.intellij.execution.process.ProcessAdapter() {
+                handler.addProcessListener(object : ProcessListener {
                     override fun onTextAvailable(
-                        event: com.intellij.execution.process.ProcessEvent,
+                        event: ProcessEvent,
                         outputType: com.intellij.openapi.util.Key<*>,
                     ) {
                         val line = event.text.trim()
