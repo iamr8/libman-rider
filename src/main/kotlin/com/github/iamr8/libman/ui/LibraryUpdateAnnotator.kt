@@ -85,7 +85,14 @@ class LibraryUpdateAnnotator :
                 }
             }
 
-            val info = service.getCached(e.provider, e.name) ?: return@flatMap out
+            val info = service.getCached(e.provider, e.name)
+            if (info == null) {
+                // A failed lookup gets a hover note on the version, so it doesn't read as "up to date".
+                service.getFailure(e.provider, e.name)?.let { failure ->
+                    out += Result(e.versionRange ?: e.nameRange, "LibMan: could not check for updates - $failure", highlight = false)
+                }
+                return@flatMap out
+            }
 
             // Description tooltip on the library name.
             nameTooltip(info.description, ProviderCatalog.pageUrl(e.provider, e.name), e.provider)?.let {

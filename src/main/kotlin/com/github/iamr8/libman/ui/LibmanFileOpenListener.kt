@@ -7,6 +7,7 @@ import com.github.iamr8.libman.provider.ProviderCatalog
 import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.components.serviceIfCreated
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * On opening a `libman.json`: warns once (per project) if the libman CLI is missing, and - when
  * check-on-open is enabled - force-checks every library for updates, cancelling that check when the
- * file is closed. The service coalesces a close+reopen so the sweep does not run twice.
+ * file is closed. The service coalesces a close+reopen so the sweep does not run twice. On closing
+ * it, runs its queued Update/Remove changes ([LibmanPendingService]).
  */
 class LibmanFileOpenListener : FileEditorManagerListener {
 
@@ -38,6 +40,10 @@ class LibmanFileOpenListener : FileEditorManagerListener {
     override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
         if (!file.name.equals(ManifestPsi.FILE_NAME, ignoreCase = true)) return
         LibmanCatalogService.getInstance(source.project).cancelSweep(file)
+        // Closing the manifest runs its queued changes, unless it is still open in another window.
+        if (source.isFileOpen(file)) return
+        val dir = file.parent?.path ?: return
+        source.project.serviceIfCreated<LibmanPendingService>()?.apply(dir)
     }
 
     /**

@@ -17,7 +17,9 @@
           <li><b>An amber version highlight</b> when a newer version exists.</li>
           <li><b>A clickable action row above the line</b> - <b>Check for updates</b>, one
               <b>Update to X</b> per available version (patch / minor / major / pre-release), and
-              <b>Remove</b> (runs <code>libman uninstall</code>).</li>
+              <b>Remove</b>. Update and Remove are queued: a banner lists the pending changes, and
+              they run on save, when the file closes, or with <b>Apply now</b>. <b>Undo</b> drops
+              one.</li>
           <li><b>A description tooltip</b> on the library name, from the provider (cdnjs, npm/unpkg,
               jsDelivr), with a link to the library's page.</li>
           <li><b>Completion</b> - library names from the provider's search, the newest versions
@@ -73,6 +75,9 @@
             language="JSON"
             implementationClass="com.github.iamr8.libman.ui.ManifestValidationAnnotator"/>
 
+        <!-- Banner on libman.json while it has queued Update/Remove changes: Apply now / Discard. -->
+        <editorNotificationProvider implementation="com.github.iamr8.libman.ui.LibmanPendingBanner"/>
+
         <!-- Completion in libman.json values: library names + versions, destination folders, files. -->
         <completion.contributor
             language="JSON"
@@ -110,11 +115,23 @@
     </extensions>
 
     <projectListeners>
-        <!-- Force-check all libraries when libman.json opens; cancel the check when it closes. -->
+        <!-- Force-check all libraries when libman.json opens; cancel the check and run queued
+             changes when it closes. -->
         <listener
             class="com.github.iamr8.libman.ui.LibmanFileOpenListener"
             topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
+
+    <applicationListeners>
+        <!-- Run queued changes on an explicit save (Save All / Save Document), never on auto-save. -->
+        <listener
+            class="com.github.iamr8.libman.ui.LibmanSaveListener"
+            topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+        <!-- Drop queued changes when a project closes, so closing its editors runs nothing. -->
+        <listener
+            class="com.github.iamr8.libman.ui.LibmanProjectCloseListener"
+            topic="com.intellij.openapi.project.ProjectCloseListener"/>
+    </applicationListeners>
 
     <actions>
         <group id="com.github.iamr8.libman.LibmanGroup"

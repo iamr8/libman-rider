@@ -19,6 +19,20 @@ All notable changes to this plugin are documented here. Format follows
 
 ### Changed
 - The plugin now loads only in Rider.
+- With pre-releases on, the pre-release chip always shows next to the stable chips when a newer
+  pre-release exists, even if it is lower than the newest stable version.
+- A failed update check (network error, provider error, library not found) now shows as
+  **Check failed. Retry** in the action row, with the reason on hover. Before, it looked the same
+  as "no update".
+- Repeat update checks for npm (unpkg) and jsDelivr libraries are conditional (`ETag`). An
+  unchanged version list is not downloaded again. cdnjs sends no `ETag`, so it still sends the
+  full list.
+- Opening `libman.json` checks up to 4 libraries at a time, not one by one, so a large manifest
+  shows its updates sooner. Closing the file still cancels the check.
+- **Update to X** and **Remove** now queue the change instead of running `libman` at once. A
+  banner on `libman.json` shows the pending changes, with **Apply now** and **Discard**. The queue
+  runs in one pass on an explicit save (Ctrl+S / Save All, not auto-save) or when the file closes.
+  **Undo** in the action row drops one queued change.
 
 ## [0.1.0]
 

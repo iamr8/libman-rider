@@ -21,8 +21,11 @@ For each library, right in the editor:
 
 - **Amber version highlight** when a newer version exists.
 - **An action row above the line** - **Check for updates**, one **Update to X** per available
-  version (patch / minor / major / pre-release), and **Remove** (runs `libman uninstall` after a
-  confirm). Each link has an icon and a hand cursor.
+  version (patch / minor / major / pre-release), and **Remove** (after a confirm). Each link has an
+  icon and a hand cursor.
+- **Queued changes** - **Update to X** and **Remove** do not run at once. A banner on top of
+  `libman.json` shows the pending changes. They run in one pass on save (Ctrl+S), when you close
+  the file, or with **Apply now**. **Undo** drops one change, **Discard** drops all.
 - **A description tooltip** on the library name, from the provider, with a link to the library's
   page.
 - **Completion** (Ctrl+Space; opens by itself after `@` and `/`) - library names from the
