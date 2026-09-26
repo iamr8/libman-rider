@@ -55,8 +55,13 @@ data class UpdateBuckets(
             val minor = stable.filter { it.major == current.major && it.minor > current.minor }.maxOrNull()
             val major = stable.filter { it.major > current.major }.maxOrNull()
 
-            // Independent of the stable buckets: the user always sees a stable and a prerelease path.
-            val prerelease = if (!includePrerelease) null else newer.filter { it.isPrerelease }.maxOrNull()
+            // With a newer stable, a prerelease shows only when it is above that stable; with none,
+            // when it is above the current version (`newer` already holds only those).
+            val bestStable = listOfNotNull(patch, minor, major).maxOrNull()
+            val prerelease = if (!includePrerelease) null else {
+                newer.filter { it.isPrerelease }.maxOrNull()
+                    ?.takeIf { bestStable == null || it > bestStable }
+            }
 
             return UpdateBuckets(patch, minor, major, prerelease)
         }

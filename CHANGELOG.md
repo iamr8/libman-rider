@@ -19,8 +19,6 @@ All notable changes to this plugin are documented here. Format follows
 
 ### Changed
 - The plugin now loads only in Rider.
-- With pre-releases on, the pre-release chip always shows next to the stable chips when a newer
-  pre-release exists, even if it is lower than the newest stable version.
 - A failed update check (network error, provider error, library not found) now shows as
   **Check failed. Retry** in the action row, with the reason on hover. Before, it looked the same
   as "no update".
