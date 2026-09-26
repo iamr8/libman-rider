@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 object ProviderCatalog {
 
     private const val TIMEOUT_MS = 15_000
+    private const val SEARCH_LIMIT = 20
 
     fun isSupported(provider: String?): Boolean = normalize(provider) != "filesystem"
 
@@ -75,6 +76,32 @@ object ProviderCatalog {
 
     private class Response(val body: String, val validators: HttpValidators?)
 
+    /**
+     * Library names matching [query] (for completion), or `null` on failure. cdnjs uses its own
+     * search; unpkg and jsDelivr use the npm search. Network here; call off the EDT.
+     */
+    fun search(provider: String?, query: String, limit: Int = SEARCH_LIMIT): List<LibrarySuggestion>? {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        return when (normalize(provider)) {
+            "filesystem" -> emptyList()
+            "unpkg", "jsdelivr" -> get(npmSearchUrl(q, limit))?.let(CatalogParsers::parseNpmSearch)
+            else -> get(cdnjsSearchUrl(q, limit))?.let(CatalogParsers::parseCdnjsSearch)
+        }
+    }
+
+    /**
+     * The files of [name]@[version], as `libman.json` lists them (no leading `/`), or `null` on
+     * failure. unpkg serves the npm package, so it uses the same jsDelivr file list. Network here.
+     */
+    fun files(provider: String?, name: String, version: String): List<String>? = when (normalize(provider)) {
+        "filesystem" -> null
+        "unpkg" -> get(jsdelivrFilesUrl("npm", name, version))?.let(CatalogParsers::parseJsdelivrFiles)
+        "jsdelivr" -> get(jsdelivrFilesUrl(if (isGitHubForm(name)) "gh" else "npm", name, version))
+            ?.let(CatalogParsers::parseJsdelivrFiles)
+        else -> get(cdnjsFilesUrl(name, version))?.let(CatalogParsers::parseCdnjsFiles)
+    }
+
     /** The provider's human-facing page for the library, or `null` when there isn't one. */
     fun pageUrl(provider: String?, name: String): String? = when (normalize(provider)) {
         "filesystem" -> null
@@ -82,6 +109,19 @@ object ProviderCatalog {
         "jsdelivr" -> if (isGitHubForm(name)) "https://www.jsdelivr.com/package/gh/$name"
         else "https://www.jsdelivr.com/package/npm/$name"
         else -> "https://cdnjs.com/libraries/$name"
+    }
+
+    /** GET [url] as a string, or `null` on any failure (cancellation still propagates). */
+    private fun get(url: String): String? = try {
+        HttpRequests.request(url)
+            .accept("application/json")
+            .connectTimeout(TIMEOUT_MS)
+            .readTimeout(TIMEOUT_MS)
+            .readString(ProgressManager.getInstance().progressIndicator)
+    } catch (e: ProcessCanceledException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     private fun normalize(provider: String?): String =
@@ -96,6 +136,19 @@ object ProviderCatalog {
     private fun npmUrl(name: String) = "https://registry.npmjs.org/${encScoped(name)}"
 
     private fun jsdelivrGhUrl(name: String) = "https://data.jsdelivr.com/v1/packages/gh/$name"
+
+    private fun cdnjsSearchUrl(query: String, limit: Int) =
+        "https://api.cdnjs.com/libraries?search=${enc(query)}&fields=version,description&limit=$limit"
+
+    private fun npmSearchUrl(query: String, limit: Int) =
+        "https://registry.npmjs.org/-/v1/search?text=${enc(query)}&size=$limit"
+
+    private fun cdnjsFilesUrl(name: String, version: String) =
+        "https://api.cdnjs.com/libraries/${enc(name)}/${enc(version)}?fields=files"
+
+    // [type] is "npm" or "gh". jsDelivr takes a scoped npm name and an owner/repo as they are.
+    private fun jsdelivrFilesUrl(type: String, name: String, version: String) =
+        "https://data.jsdelivr.com/v1/packages/$type/$name@${enc(version)}?structure=flat"
 
     private fun enc(s: String): String = URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20")
 

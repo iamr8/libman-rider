@@ -22,7 +22,11 @@
               one.</li>
           <li><b>A description tooltip</b> on the library name, from the provider (cdnjs, npm/unpkg,
               jsDelivr), with a link to the library's page.</li>
-          <li><b>Manifest checks</b> - a warning on an unknown provider, and a hint when a newer
+          <li><b>Completion</b> - library names from the provider's search, the newest versions
+              after <code>@</code>, <code>destination</code> folders, and the library's files in
+              <code>files</code>.</li>
+          <li><b>Manifest checks</b> - a warning on an unknown provider, a warning on a
+              <code>files</code> entry the library version does not have, and a hint when a newer
               <code>libman.json</code> schema version is available.</li>
         </ul>
 
@@ -73,6 +77,13 @@
 
         <!-- Banner on libman.json while it has queued Update/Remove changes: Apply now / Discard. -->
         <editorNotificationProvider implementation="com.github.iamr8.libman.ui.LibmanPendingBanner"/>
+
+        <!-- Completion in libman.json values: library names + versions, destination folders, files. -->
+        <completion.contributor
+            language="JSON"
+            implementationClass="com.github.iamr8.libman.ui.LibmanCompletionContributor"/>
+        <!-- Opens that completion after the version `@` and after `/` in a path. -->
+        <typedHandler implementation="com.github.iamr8.libman.ui.LibmanTypedHandler"/>
 
         <!-- Action row above each library line: Check for updates + Update to X + Remove. -->
         <codeInsight.inlayProvider

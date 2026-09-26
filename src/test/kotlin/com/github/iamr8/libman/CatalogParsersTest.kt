@@ -1,6 +1,7 @@
 package com.github.iamr8.libman
 
 import com.github.iamr8.libman.provider.CatalogParsers
+import com.github.iamr8.libman.provider.LibrarySuggestion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,6 +33,30 @@ class CatalogParsersTest {
     @Test fun `blank description becomes null`() {
         val json = """{"description":"  ","versions":["1.0.0"]}"""
         assertNull(CatalogParsers.parseCdnjs(json)!!.description)
+    }
+
+    @Test fun `cdnjs search`() {
+        val json = """{"results":[{"name":"jquery","latest":"https://x/jquery.min.js","version":"4.0.0","description":"DOM"},{"version":"1"}],"total":2}"""
+        assertEquals(
+            listOf(LibrarySuggestion("jquery", "4.0.0", "DOM")),
+            CatalogParsers.parseCdnjsSearch(json),
+        )
+    }
+
+    @Test fun `npm search`() {
+        val json = """{"objects":[{"downloads":{},"package":{"name":"jq","version":"1.7.2","description":"jQuery wrapper"}},{"package":{"name":"@scope/x"}}]}"""
+        assertEquals(
+            listOf(LibrarySuggestion("jq", "1.7.2", "jQuery wrapper"), LibrarySuggestion("@scope/x", null, null)),
+            CatalogParsers.parseNpmSearch(json),
+        )
+    }
+
+    @Test fun `file lists`() {
+        assertEquals(listOf("jquery.js", "jquery.min.js"), CatalogParsers.parseCdnjsFiles("""{"files":["jquery.js","jquery.min.js"]}"""))
+        val jsd = """{"type":"npm","files":[{"name":"/AUTHORS.txt","size":1},{"name":"/dist/jquery.js"}]}"""
+        assertEquals(listOf("AUTHORS.txt", "dist/jquery.js"), CatalogParsers.parseJsdelivrFiles(jsd))
+        assertNull(CatalogParsers.parseCdnjsFiles("""{"error":true}"""))
+        assertNull(CatalogParsers.parseNpmSearch("[]"))
     }
 
     @Test fun `malformed json returns null`() {

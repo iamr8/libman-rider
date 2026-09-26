@@ -1,7 +1,9 @@
 package com.github.iamr8.libman.ui
 
+import com.github.iamr8.libman.model.ManifestFiles
 import com.github.iamr8.libman.model.UpdateBuckets
 import com.github.iamr8.libman.provider.LibmanCatalogService
+import com.github.iamr8.libman.provider.LibraryVersionRef
 import com.github.iamr8.libman.provider.ProviderCatalog
 import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.lang.annotation.AnnotationHolder
@@ -34,12 +36,17 @@ class LibraryUpdateAnnotator :
         val version: String?,
         val versionRange: TextRange?,
         val nameRange: TextRange,
+        /** The `files` values with their ranges, checked against the version's file list. */
+        val files: List<Pair<String, TextRange>> = emptyList(),
     )
 
     data class Collected(val project: Project, val entries: List<Entry>)
 
-    /** A single annotation: a hover tooltip, optionally with the amber "update" background. */
-    data class Result(val range: TextRange, val tooltip: String, val highlight: Boolean)
+    /**
+     * A single annotation: a hover tooltip, optionally with the amber "update" background, or a
+     * [warning] (a `files` entry the library version does not have).
+     */
+    data class Result(val range: TextRange, val tooltip: String, val highlight: Boolean, val warning: Boolean = false)
 
     override fun collectInformation(file: PsiFile): Collected? {
         if (!ManifestPsi.isManifest(file)) return null
@@ -48,7 +55,7 @@ class LibraryUpdateAnnotator :
             val ctx = ManifestPsi.contextOf(obj, file) ?: return@mapNotNull null
             if (!ProviderCatalog.isSupported(ctx.provider)) return@mapNotNull null
             val nameRange = ManifestPsi.nameRange(obj, ctx) ?: return@mapNotNull null
-            Entry(ctx.provider, ctx.id.name, ctx.id.version, ManifestPsi.versionRange(obj, ctx), nameRange)
+            Entry(ctx.provider, ctx.id.name, ctx.id.version, ManifestPsi.versionRange(obj, ctx), nameRange, ManifestPsi.fileValues(obj))
         }
         return if (entries.isEmpty()) null else Collected(file.project, entries)
     }
@@ -59,15 +66,33 @@ class LibraryUpdateAnnotator :
         // Cache-only: never fetch on the highlighting thread. Fetching happens in the visible,
         // cancellable open-sweep and "Check for updates" tasks, which call requestRefresh() to
         // re-run this pass once fresh data lands.
-        return collectedInfo.entries.flatMap { e ->
+        val toPrefetch = mutableListOf<LibraryVersionRef>()
+        val results = collectedInfo.entries.flatMap { e ->
+            val out = mutableListOf<Result>()
+
+            // `files` entries the version does not have. The file list is fetched once in the
+            // background (prefetchFiles); until it is cached, nothing is flagged.
+            if (e.version != null && e.files.isNotEmpty()) {
+                val ref = LibraryVersionRef(e.provider, e.name, e.version)
+                val available = service.getCachedFiles(ref)
+                if (available == null) {
+                    toPrefetch += ref
+                } else {
+                    val missing = ManifestFiles.missing(e.files.map { it.first }, available).toSet()
+                    e.files.filter { it.first in missing }.forEach { (path, range) ->
+                        out += Result(range, "LibMan: \"$path\" is not in ${e.name}@${e.version}", highlight = false, warning = true)
+                    }
+                }
+            }
+
             val info = service.getCached(e.provider, e.name)
             if (info == null) {
                 // A failed lookup gets a hover note on the version, so it doesn't read as "up to date".
-                val failure = service.getFailure(e.provider, e.name) ?: return@flatMap emptyList()
-                val tip = "LibMan: could not check for updates - $failure"
-                return@flatMap listOf(Result(e.versionRange ?: e.nameRange, tip, highlight = false))
+                service.getFailure(e.provider, e.name)?.let { failure ->
+                    out += Result(e.versionRange ?: e.nameRange, "LibMan: could not check for updates - $failure", highlight = false)
+                }
+                return@flatMap out
             }
-            val out = mutableListOf<Result>()
 
             // Description tooltip on the library name.
             nameTooltip(info.description, ProviderCatalog.pageUrl(e.provider, e.name), e.provider)?.let {
@@ -84,10 +109,16 @@ class LibraryUpdateAnnotator :
             }
             out
         }
+        if (toPrefetch.isNotEmpty()) service.prefetchFiles(toPrefetch)
+        return results
     }
 
     override fun apply(file: PsiFile, annotationResult: List<Result>, holder: AnnotationHolder) {
         for (r in annotationResult) {
+            if (r.warning) {
+                holder.newAnnotation(HighlightSeverity.WARNING, r.tooltip).range(r.range).create()
+                continue
+            }
             // Silent: never a Problems-view entry; just a hover tooltip (plus the amber background
             // on version ranges).
             val builder = holder.newSilentAnnotation(HighlightSeverity.INFORMATION)
