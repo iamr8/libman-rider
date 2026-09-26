@@ -75,7 +75,17 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                 }
 
                 val links = mutableListOf<InlayPresentation>()
-                links += link(AllIcons.Actions.Refresh, "Check for updates") { service.refreshInBackground(ctx.provider, ctx.id.name) }
+                val recheck = { service.refreshInBackground(ctx.provider, ctx.id.name) }
+                // A failed lookup must not look like "up to date": show it, with the reason on hover.
+                val failure = service.getFailure(ctx.provider, ctx.id.name)
+                links += if (failure == null) {
+                    link(AllIcons.Actions.Refresh, "Check for updates", recheck)
+                } else {
+                    factory.withTooltip(
+                        "Could not check for updates: $failure",
+                        link(AllIcons.General.Warning, "Check failed. Retry", recheck),
+                    )
+                }
                 val candidates = buckets?.candidates().orEmpty()
                 candidates.forEach { c ->
                     val label = UpdateLabel.chip(c.version.raw, c.kind.label, single = candidates.size == 1)

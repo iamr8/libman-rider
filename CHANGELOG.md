@@ -12,6 +12,9 @@ All notable changes to this plugin are documented here. Format follows
 
 ### Changed
 - The plugin now loads only in Rider.
+- A failed update check (network error, provider error, library not found) now shows as
+  **Check failed. Retry** in the action row, with the reason on hover. Before, it looked the same
+  as "no update".
 
 ## [0.1.0]
 
