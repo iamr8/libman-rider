@@ -1,11 +1,15 @@
 package com.github.iamr8.libman.provider
 
+import com.github.iamr8.libman.util.HttpValidators
 import java.util.concurrent.ConcurrentHashMap
 
 /** The outcome of one catalog lookup: the library's info, or why the lookup failed. */
 sealed interface CatalogFetch {
-    data class Found(val info: LibInfo) : CatalogFetch
+    /** [validators] come from the response, for the next conditional request. */
+    data class Found(val info: LibInfo, val validators: HttpValidators? = null) : CatalogFetch
     data class Failed(val reason: String) : CatalogFetch
+    /** The provider says the cached copy is still current (HTTP 304). */
+    data object NotModified : CatalogFetch
 }
 
 /**
@@ -16,12 +20,12 @@ sealed interface CatalogFetch {
  * [getOrFetch] and [refresh] block on [fetch]; call them off the EDT.
  */
 class CatalogCache(
-    private val fetch: (provider: String?, name: String) -> CatalogFetch,
+    private val fetch: (provider: String?, name: String, validators: HttpValidators?) -> CatalogFetch,
     private val ttlMillis: () -> Long,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
 
-    private data class Entry(val info: LibInfo?, val error: String?, val at: Long)
+    private data class Entry(val info: LibInfo?, val error: String?, val at: Long, val validators: HttpValidators?)
 
     private val entries = ConcurrentHashMap<String, Entry>()
 
@@ -37,13 +41,21 @@ class CatalogCache(
         return refresh(provider, name)
     }
 
-    /** Fetch now (blocking) and replace the cached entry. */
+    /**
+     * Fetch now (blocking) and replace the cached entry. When a cached copy exists (even an expired
+     * one), the fetch is conditional; on [CatalogFetch.NotModified] the copy is kept and made fresh.
+     */
     fun refresh(provider: String?, name: String): LibInfo? {
-        val entry = when (val r = fetch(provider, name)) {
-            is CatalogFetch.Found -> Entry(r.info, null, now())
-            is CatalogFetch.Failed -> Entry(null, r.reason, now())
+        val k = key(provider, name)
+        // Revalidate only with data to keep: a 304 needs a cached copy to fall back on.
+        val previous = entries[k]?.takeIf { it.info != null }
+        val entry = when (val r = fetch(provider, name, previous?.validators)) {
+            is CatalogFetch.Found -> Entry(r.info, null, now(), r.validators)
+            is CatalogFetch.Failed -> Entry(null, r.reason, now(), null)
+            CatalogFetch.NotModified -> previous?.copy(error = null, at = now())
+                ?: Entry(null, FetchFailures.UNEXPECTED_RESPONSE, now(), null)
         }
-        entries[key(provider, name)] = entry
+        entries[k] = entry
         return entry.info
     }
 

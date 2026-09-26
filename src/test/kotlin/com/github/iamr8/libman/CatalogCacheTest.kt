@@ -2,7 +2,9 @@ package com.github.iamr8.libman
 
 import com.github.iamr8.libman.provider.CatalogCache
 import com.github.iamr8.libman.provider.CatalogFetch
+import com.github.iamr8.libman.provider.FetchFailures
 import com.github.iamr8.libman.provider.LibInfo
+import com.github.iamr8.libman.util.HttpValidators
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -14,9 +16,10 @@ class CatalogCacheTest {
     private var clock = 1_000L
     private var calls = 0
     private var next: CatalogFetch = CatalogFetch.Found(jquery)
+    private val sent = mutableListOf<HttpValidators?>()
 
     private val cache = CatalogCache(
-        fetch = { _, _ -> calls++; next },
+        fetch = { _, _, validators -> calls++; sent += validators; next },
         ttlMillis = { 60_000L },
         now = { clock },
     )
@@ -64,6 +67,58 @@ class CatalogCacheTest {
         next = CatalogFetch.Found(jquery)
         assertEquals(jquery, cache.getOrFetch("cdnjs", "jquery"))
         assertEquals(2, calls)
+    }
+
+    private val etag = HttpValidators("\"abc\"", "Mon, 14 Sep 2026 17:07:37 GMT")
+
+    @Test fun `first fetch is not conditional`() {
+        cache.refresh("unpkg", "jquery")
+        assertEquals(listOf<HttpValidators?>(null), sent)
+    }
+
+    @Test fun `refresh sends the stored validators`() {
+        next = CatalogFetch.Found(jquery, etag)
+        cache.refresh("unpkg", "jquery")
+        cache.refresh("unpkg", "jquery")
+        assertEquals(listOf(null, etag), sent)
+    }
+
+    @Test fun `not modified keeps the copy and makes it fresh`() {
+        next = CatalogFetch.Found(jquery, etag)
+        cache.refresh("unpkg", "jquery")
+        clock += 59_000L
+        next = CatalogFetch.NotModified
+        assertEquals(jquery, cache.refresh("unpkg", "jquery"))
+        clock += 59_000L // fresh again from the 304, not from the first fetch
+        assertEquals(jquery, cache.info("unpkg", "jquery"))
+        assertNull(cache.error("unpkg", "jquery"))
+        cache.refresh("unpkg", "jquery")
+        assertEquals(etag, sent.last()) // validators kept across the 304
+    }
+
+    @Test fun `an expired copy is still revalidated`() {
+        next = CatalogFetch.Found(jquery, etag)
+        cache.refresh("unpkg", "jquery")
+        clock += 120_000L
+        next = CatalogFetch.NotModified
+        assertEquals(jquery, cache.getOrFetch("unpkg", "jquery"))
+        assertEquals(etag, sent.last())
+    }
+
+    @Test fun `no validators after a failure`() {
+        next = CatalogFetch.Found(jquery, etag)
+        cache.refresh("unpkg", "jquery")
+        next = CatalogFetch.Failed("timed out")
+        cache.refresh("unpkg", "jquery")
+        next = CatalogFetch.Found(jquery, etag)
+        cache.refresh("unpkg", "jquery")
+        assertNull(sent.last())
+    }
+
+    @Test fun `not modified without a cached copy is a failure`() {
+        next = CatalogFetch.NotModified
+        assertNull(cache.refresh("unpkg", "jquery"))
+        assertEquals(FetchFailures.UNEXPECTED_RESPONSE, cache.error("unpkg", "jquery"))
     }
 
     @Test fun `key ignores provider case and blanks, not the name`() {

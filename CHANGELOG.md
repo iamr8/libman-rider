@@ -15,6 +15,9 @@ All notable changes to this plugin are documented here. Format follows
 - A failed update check (network error, provider error, library not found) now shows as
   **Check failed. Retry** in the action row, with the reason on hover. Before, it looked the same
   as "no update".
+- Repeat update checks for npm (unpkg) and jsDelivr libraries are conditional (`ETag`). An
+  unchanged version list is not downloaded again. cdnjs sends no `ETag`, so it still sends the
+  full list.
 
 ## [0.1.0]
 
