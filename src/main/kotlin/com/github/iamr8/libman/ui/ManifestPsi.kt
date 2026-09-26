@@ -48,6 +48,19 @@ object ManifestPsi {
         return LibraryEntryContext(LibraryId.parse(library, provider), provider, manifestDir)
     }
 
+    /** The entry's own `provider`, else the manifest `defaultProvider` of [file]. */
+    fun effectiveProvider(obj: JsonObject, file: PsiFile): String? =
+        stringValue(obj, "provider") ?: (file as? JsonFile)?.let { defaultProvider(it) }
+
+    /** The `files` values of an entry, each with the range of its text (inside the quotes). */
+    fun fileValues(obj: JsonObject): List<Pair<String, TextRange>> {
+        val array = obj.findProperty("files")?.value as? JsonArray ?: return emptyList()
+        return array.valueList.filterIsInstance<JsonStringLiteral>().map { literal ->
+            val r = literal.textRange
+            literal.value to TextRange(r.startOffset + 1, maxOf(r.startOffset + 1, r.endOffset - 1))
+        }
+    }
+
     /** Resolves the library entry containing [offset], or `null` if the caret isn't inside one. */
     fun libraryEntryAt(file: PsiFile, offset: Int): LibraryEntryContext? {
         if (!isManifest(file)) return null

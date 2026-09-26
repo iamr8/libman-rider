@@ -31,6 +31,33 @@ object CatalogParsers {
         return LibInfo(versions, null)
     }
 
+    /** cdnjs search: `{ "results": [ { "name": "jquery", "version": "4.0.0", "description": "..." } ] }`. */
+    fun parseCdnjsSearch(json: String): List<LibrarySuggestion>? {
+        val results = root(json)?.getAsJsonArray("results") ?: return null
+        return results.mapNotNull { (it as? JsonObject)?.suggestion() }
+    }
+
+    /** npm search: `{ "objects": [ { "package": { "name": "jquery", "version": "...", "description": "..." } } ] }`. */
+    fun parseNpmSearch(json: String): List<LibrarySuggestion>? {
+        val objects = root(json)?.getAsJsonArray("objects") ?: return null
+        return objects.mapNotNull { ((it as? JsonObject)?.get("package") as? JsonObject)?.suggestion() }
+    }
+
+    /** cdnjs files of one version: `{ "files": ["jquery.js", "jquery.min.js"] }`. */
+    fun parseCdnjsFiles(json: String): List<String>? =
+        root(json)?.getAsJsonArray("files")?.mapNotNull { it.asStringOrNull() }
+
+    /**
+     * jsDelivr flat file list (npm and GitHub): `{ "files": [ { "name": "/dist/jquery.js" } ] }`.
+     * Names are returned without the leading `/`, the form `libman.json` uses.
+     */
+    fun parseJsdelivrFiles(json: String): List<String>? =
+        root(json)?.getAsJsonArray("files")
+            ?.mapNotNull { (it as? JsonObject)?.string("name")?.removePrefix("/") }
+
+    private fun JsonObject.suggestion(): LibrarySuggestion? =
+        string("name")?.let { LibrarySuggestion(it, string("version"), string("description")) }
+
     private fun root(json: String): JsonObject? = try {
         JsonParser.parseString(json).takeIf { it.isJsonObject }?.asJsonObject
     } catch (e: Exception) {

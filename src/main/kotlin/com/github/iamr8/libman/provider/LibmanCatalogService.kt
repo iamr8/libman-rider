@@ -31,6 +31,12 @@ class LibmanCatalogService(private val project: Project) {
     private data class Entry(val info: LibInfo?, val at: Long)
 
     private val cache = ConcurrentHashMap<String, Entry>()
+
+    // Completion and `files` checks: search results per (provider, query), file lists per version.
+    private data class Timed<T>(val value: T, val at: Long)
+    private val searches = ConcurrentHashMap<String, Timed<List<LibrarySuggestion>>>()
+    private val fileLists = ConcurrentHashMap<String, Timed<List<String>?>>()
+    private val filesInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val refreshPending = AtomicBoolean(false)
 
     // One open-file sweep at a time per manifest: the entry both guards against a close+reopen
@@ -102,6 +108,66 @@ class LibmanCatalogService(private val project: Project) {
         sweeps.remove(file)?.cancel()
     }
 
+    /**
+     * Library names matching [query] from the provider's search (blocking, cached for the TTL).
+     * Off-EDT only. Failures are not cached, so the next completion tries again.
+     */
+    fun search(provider: String?, query: String): List<LibrarySuggestion>? {
+        val k = key(provider, query)
+        searches[k]?.takeIf { fresh(it.at) }?.let { return it.value }
+        val hits = ProviderCatalog.search(provider, query) ?: return null
+        searches[k] = Timed(hits, System.currentTimeMillis())
+        return hits
+    }
+
+    /** Fresh cached file list of a library version, or null if not fetched, expired, or failed. Never fetches. */
+    fun getCachedFiles(ref: LibraryVersionRef): List<String>? =
+        fileLists[filesKey(ref)]?.takeIf { fresh(it.at) }?.value
+
+    /**
+     * Cached-if-fresh, else fetch now (blocking). Off-EDT only. A failed fetch is cached as null for
+     * the TTL, so the annotator does not retry in a loop; [retryFailed] (completion) tries again.
+     */
+    fun getOrFetchFiles(ref: LibraryVersionRef, retryFailed: Boolean = false): List<String>? {
+        val k = filesKey(ref)
+        fileLists[k]?.takeIf { fresh(it.at) && (it.value != null || !retryFailed) }?.let { return it.value }
+        val files = ProviderCatalog.files(ref.provider, ref.name, ref.version)
+        fileLists[k] = Timed(files, System.currentTimeMillis())
+        return files
+    }
+
+    /**
+     * Fetch the file lists of [refs] that are not cached yet, in one visible, cancellable
+     * background task, then re-render (the annotator checks `files` from the cache only).
+     */
+    fun prefetchFiles(refs: Collection<LibraryVersionRef>) {
+        val todo = refs.distinct().filter { r ->
+            fileLists[filesKey(r)]?.takeIf { fresh(it.at) } == null && filesInFlight.add(filesKey(r))
+        }
+        if (todo.isEmpty()) return
+        ApplicationManager.getApplication().invokeLater({
+            if (project.isDisposed) {
+                todo.forEach { filesInFlight.remove(filesKey(it)) }
+                return@invokeLater
+            }
+            ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Fetching library file lists", true) {
+                override fun run(indicator: ProgressIndicator) {
+                    for (r in todo) {
+                        indicator.checkCanceled()
+                        getOrFetchFiles(r)
+                    }
+                }
+
+                // Not on cancel: a re-render would start the fetch again right away.
+                override fun onSuccess() = requestRefresh()
+
+                override fun onFinished() {
+                    todo.forEach { filesInFlight.remove(filesKey(it)) }
+                }
+            })
+        }, ModalityState.any())
+    }
+
     /** Debounced daemon restart so a freshly filled cache re-renders the highlight and inlays. */
     fun requestRefresh() {
         if (!refreshPending.compareAndSet(false, true)) return
@@ -119,8 +185,12 @@ class LibmanCatalogService(private val project: Project) {
         }, ModalityState.any())
     }
 
-    private fun fresh(e: Entry): Boolean =
-        System.currentTimeMillis() - e.at < LibmanSettings.getInstance().cacheTtlMinutes * 60_000L
+    private fun fresh(e: Entry): Boolean = fresh(e.at)
+
+    private fun fresh(at: Long): Boolean =
+        System.currentTimeMillis() - at < LibmanSettings.getInstance().cacheTtlMinutes * 60_000L
+
+    private fun filesKey(ref: LibraryVersionRef): String = key(ref.provider, "${ref.name}@${ref.version}")
 
     private fun key(provider: String?, name: String): String =
         "${provider?.trim()?.lowercase().orEmpty()}::$name"
