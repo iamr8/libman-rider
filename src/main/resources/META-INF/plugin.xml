@@ -48,6 +48,9 @@
     <depends>com.intellij.modules.platform</depends>
     <!-- libman.json is JSON; the plugin reads/edits it via the bundled JSON PSI. -->
     <depends>com.intellij.modules.json</depends>
+    <!-- Rider only. This also loads the plugin after Rider's `intellij.rider` module, which
+         registers SolutionExplorerPopupMenu (used by add-to-group below). -->
+    <depends>com.intellij.modules.rider</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Report plugin exceptions (only when the user chooses) to the Marketplace Exceptions tab. -->
@@ -86,7 +89,8 @@
              type's fileNames, so the IDE's plugin advertiser suggests this plugin when a user opens a
              libman.json. The class extends LanguageFileType(JsonLanguage), so the file keeps JSON
              parsing / schema / our JSON-language features. No `language` attribute: that declares the
-             PRIMARY type for a language, and JSON's primary stays JsonFileType. -->
+             PRIMARY type for a language, and JSON's primary stays JsonFileType. So the class must be a
+             secondary type (LanguageFileType(JsonLanguage, true)), or the IDE logs an error at start. -->
         <fileType
             name="LibMan Configuration"
             implementationClass="com.github.iamr8.libman.LibManJsonFileType"
