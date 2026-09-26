@@ -4,6 +4,15 @@ All notable changes to this plugin are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Two errors in the IDE log at every start: the `libman.json` file type, and the menu entry in
+  the Solution Explorer context menu.
+
+### Changed
+- The plugin now loads only in Rider.
+
 ## [0.1.0]
 
 First release. Brings Visual Studio's LibMan experience to Rider, with an inline update

@@ -19,8 +19,10 @@ import javax.swing.Icon
  *
  * This is a secondary JSON-language type; JsonFileType stays the primary type for the JSON language,
  * so the plugin.xml bean sets no `language` attribute (that would claim the primary role).
+ * The platform accepts a bean with no `language` only for a secondary type, so the second
+ * constructor argument (`secondary`) must be `true`.
  */
-object LibManJsonFileType : LanguageFileType(JsonLanguage.INSTANCE) {
+object LibManJsonFileType : LanguageFileType(JsonLanguage.INSTANCE, true) {
     override fun getName(): String = "LibMan Configuration"
     override fun getDescription(): String = "LibMan client-side library manifest (libman.json)"
     override fun getDefaultExtension(): String = "json"
