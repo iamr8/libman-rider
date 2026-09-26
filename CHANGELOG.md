@@ -20,6 +20,8 @@ All notable changes to this plugin are documented here. Format follows
 - Repeat update checks for npm (unpkg) and jsDelivr libraries are conditional (`ETag`). An
   unchanged version list is not downloaded again. cdnjs sends no `ETag`, so it still sends the
   full list.
+- Opening `libman.json` checks up to 4 libraries at a time, not one by one, so a large manifest
+  shows its updates sooner. Closing the file still cancels the check.
 
 ## [0.1.0]
 
