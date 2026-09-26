@@ -28,16 +28,41 @@ class UpdateBucketsTest {
         assertEquals(listOf(UpdateKind.PATCH, UpdateKind.MINOR, UpdateKind.MAJOR), kinds)
     }
 
-    @Test fun `prerelease offered only when newer than best stable`() {
-        // 4.0.0 stable exists, so 4.0.0-rc.2 (older than 4.0.0) must NOT be offered.
-        val withPre = UpdateBuckets.compute("3.7.1", available, includePrerelease = true)
-        assertNull(withPre.prerelease)
+    @Test fun `prerelease offered next to stable even when lower than best stable`() {
+        // 4.0.0 stable exists and 4.0.0-rc.2 is lower, but it is newer than 3.7.1 -> offer both.
+        val b = UpdateBuckets.compute("3.7.1", available, includePrerelease = true)
+        assertEquals("4.0.0", b.major?.raw)
+        assertEquals("4.0.0-rc.2", b.prerelease?.raw)
+        assertEquals(
+            listOf(UpdateKind.PATCH, UpdateKind.MINOR, UpdateKind.MAJOR, UpdateKind.PRERELEASE),
+            b.candidates().map { it.kind },
+        )
+    }
 
-        // No stable above 4.0.0, but a 4.1.0-beta.1 prerelease exists -> offer it.
+    @Test fun `prerelease of the same core as the stable update is offered`() {
+        val b = UpdateBuckets.compute("3.7.1", listOf("3.7.2-rc.1", "3.7.2"), includePrerelease = true)
+        assertEquals("3.7.2", b.patch?.raw)
+        assertEquals("3.7.2-rc.1", b.prerelease?.raw)
+    }
+
+    @Test fun `prerelease offered when no stable update exists`() {
         val list = available + "4.1.0-beta.1"
         val b = UpdateBuckets.compute("4.0.0", list, includePrerelease = true)
         assertEquals("4.1.0-beta.1", b.prerelease?.raw)
         assertNull(b.patch); assertNull(b.minor); assertNull(b.major)
+    }
+
+    @Test fun `highest newer prerelease wins`() {
+        val list = listOf("4.0.0-alpha.1", "4.0.0-rc.1", "4.0.0-beta.3")
+        val b = UpdateBuckets.compute("3.7.1", list, includePrerelease = true)
+        assertEquals("4.0.0-rc.1", b.prerelease?.raw)
+    }
+
+    @Test fun `prerelease not newer than current is not offered`() {
+        val list = listOf("3.7.1-rc.1", "3.7.0-beta.1", "3.7.2")
+        val b = UpdateBuckets.compute("3.7.1", list, includePrerelease = true)
+        assertNull(b.prerelease)
+        assertEquals("3.7.2", b.patch?.raw)
     }
 
     @Test fun `prerelease excluded when includePrerelease false`() {
