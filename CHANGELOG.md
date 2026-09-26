@@ -22,6 +22,10 @@ All notable changes to this plugin are documented here. Format follows
   full list.
 - Opening `libman.json` checks up to 4 libraries at a time, not one by one, so a large manifest
   shows its updates sooner. Closing the file still cancels the check.
+- **Update to X** and **Remove** now queue the change instead of running `libman` at once. A
+  banner on `libman.json` shows the pending changes, with **Apply now** and **Discard**. The queue
+  runs in one pass on an explicit save (Ctrl+S / Save All, not auto-save) or when the file closes.
+  **Undo** in the action row drops one queued change.
 
 ## [0.1.0]
 

@@ -1,9 +1,9 @@
 package com.github.iamr8.libman.ui
 
-import com.github.iamr8.libman.cli.OpResultParser
-import com.github.iamr8.libman.cli.UninstallOutcome
-import com.github.iamr8.libman.cli.UpdateOutcome
+import com.github.iamr8.libman.cli.PendingSummary
+import com.github.iamr8.libman.model.PendingChange
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 
 /**
  * The user-facing LibMan operations, shared by the inline action links and the context-menu actions.
@@ -12,50 +12,46 @@ import com.intellij.openapi.project.Project
 object LibmanOps {
 
     /**
-     * Update a library. With [to] set, installs that exact version (used by the version chips);
-     * otherwise moves to the latest (stable, or prerelease when [pre]).
+     * Runs the queued [changes] of one manifest, in order, as one background task, then shows one
+     * summary. [onDone] gets the changes that did not run (the task stopped early), so they can go
+     * back in the queue.
+     *
+     * @return false, and nothing runs, when another operation on this manifest is running.
      */
-    fun update(project: Project, manifestDir: String, name: String, pre: Boolean = false, to: String? = null) {
-        LibmanRun.run(
-            project,
-            title = if (to != null) "Installing $name@$to" else "Updating $name",
-            op = "update",
-            manifestDir = manifestDir,
-            key = libraryKey(manifestDir, name),
-            action = { it.update(manifestDir, name, pre, to) },
-            // libman exits 0 even for a no-op or a missing library, so read the outcome from stdout.
-            onOk = { r ->
-                when (val outcome = OpResultParser.parseUpdate(r.stdout)) {
-                    is UpdateOutcome.Updated -> LibmanNotifications.info(project, name, "Updated to ${outcome.version}.")
-                    UpdateOutcome.AlreadyLatest -> LibmanNotifications.info(project, name, "Already up to date.")
-                    UpdateOutcome.NotFound ->
-                        LibmanNotifications.failure(project, name, "No library named \"$name\" in the manifest.", r.combinedOutput())
-                    UpdateOutcome.Unknown ->
-                        LibmanNotifications.failure(project, name, "Update result was unclear.", r.combinedOutput())
-                }
-            },
-        )
-    }
+    fun applyPending(
+        project: Project,
+        manifestDir: String,
+        changes: List<PendingChange>,
+        onDone: (notRun: List<PendingChange>) -> Unit,
+    ): Boolean = LibmanRun.runSequence(
+        project,
+        title = "Applying LibMan changes",
+        manifestDir = manifestDir,
+        // The manifest key: never overlaps restore/clean, or another apply, on the same manifest.
+        key = manifestKey(manifestDir),
+        steps = changes,
+        stepTitle = { c ->
+            when (c) {
+                is PendingChange.Update -> "Installing ${c.name}@${c.to}"
+                is PendingChange.Remove -> "Uninstalling ${c.name}"
+            }
+        },
+        action = { runner, c ->
+            when (c) {
+                is PendingChange.Update -> runner.update(manifestDir, c.name, to = c.to)
+                is PendingChange.Remove -> runner.uninstall(manifestDir, c.name)
+            }
+        },
+        onDone = { results ->
+            notifySummary(project, PendingSummary.of(results))
+            onDone(changes.drop(results.size))
+        },
+    )
 
-    /** Uninstall a library: remove its files and its manifest entry. */
-    fun uninstall(project: Project, manifestDir: String, name: String) {
-        LibmanRun.run(
-            project,
-            title = "Uninstalling $name",
-            op = "uninstall",
-            manifestDir = manifestDir,
-            key = libraryKey(manifestDir, name),
-            action = { it.uninstall(manifestDir, name) },
-            onOk = { r ->
-                when (OpResultParser.parseUninstall(r.stdout)) {
-                    UninstallOutcome.Uninstalled -> LibmanNotifications.info(project, name, "Uninstalled.")
-                    UninstallOutcome.NotInstalled ->
-                        LibmanNotifications.failure(project, name, "\"$name\" is not installed.", r.combinedOutput())
-                    UninstallOutcome.Unknown ->
-                        LibmanNotifications.failure(project, name, "Uninstall result was unclear.", r.combinedOutput())
-                }
-            },
-        )
+    private fun notifySummary(project: Project, summary: PendingSummary) {
+        fun html(lines: List<String>) = lines.joinToString("<br/>") { StringUtil.escapeXmlEntities(it) }
+        if (summary.applied.isNotEmpty()) LibmanNotifications.info(project, "LibMan", html(summary.applied))
+        if (summary.failed.isNotEmpty()) LibmanNotifications.failure(project, "LibMan", html(summary.failed), summary.details)
     }
 
     /** Restore every library defined in the manifest. */
@@ -84,9 +80,7 @@ object LibmanOps {
         )
     }
 
-    // NUL separator can't appear in a path or a library name, so keys never collide.
-    private fun libraryKey(manifestDir: String, name: String): String = "$manifestDir\u0000$name"
-
-    // Whole-manifest ops (restore/clean) share one key, so they never overlap on the same manifest.
+    // Whole-manifest ops (restore/clean/apply) share one key, so they never overlap on the same
+    // manifest. NUL can't appear in a path, so the key never collides with a path.
     private fun manifestKey(manifestDir: String): String = "$manifestDir\u0000"
 }

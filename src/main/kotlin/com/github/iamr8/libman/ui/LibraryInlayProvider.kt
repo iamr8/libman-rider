@@ -2,6 +2,8 @@
 
 package com.github.iamr8.libman.ui
 
+import com.github.iamr8.libman.model.PendingChange
+import com.github.iamr8.libman.model.PendingChanges
 import com.github.iamr8.libman.model.UpdateBuckets
 import com.github.iamr8.libman.model.UpdateLabel
 import com.github.iamr8.libman.provider.LibmanCatalogService
@@ -29,6 +31,8 @@ import javax.swing.JPanel
 /**
  * Renders one clickable action row above each `library` line in `libman.json`, indented to the
  * `library` column: "Check for updates", one "Update to X" per available version, and "Remove".
+ * Update and Remove queue the change ([LibmanPendingService]); a queued library shows
+ * "Pending: ..." and "Undo" instead.
  * The links have no background; the description is shown as a hover tooltip by [LibraryUpdateAnnotator],
  * which also fills [LibmanCatalogService]'s cache (no network here).
  */
@@ -54,6 +58,7 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
         if (!ManifestPsi.isManifest(file)) return null
         val project = file.project
         val service = LibmanCatalogService.getInstance(project)
+        val pending = LibmanPendingService.getInstance(project)
 
         return object : FactoryInlayHintsCollector(editor) {
             override fun collect(element: PsiElement, editor: Editor, sink: InlayHintsSink): Boolean {
@@ -75,32 +80,44 @@ class LibraryInlayProvider : InlayHintsProvider<NoSettings> {
                 }
 
                 val links = mutableListOf<InlayPresentation>()
-                val recheck = { service.refreshInBackground(ctx.provider, ctx.id.name) }
-                // A failed lookup must not look like "up to date": show it, with the reason on hover.
-                val failure = service.getFailure(ctx.provider, ctx.id.name)
-                links += if (failure == null) {
-                    link(AllIcons.Actions.Refresh, "Check for updates", recheck)
-                } else {
-                    factory.withTooltip(
-                        "Could not check for updates: $failure",
-                        link(AllIcons.General.Warning, "Check failed. Retry", recheck),
+                val queued = pending.pending(ctx.manifestDir, ctx.id.name)
+                if (queued != null) {
+                    // A queued change replaces the row until it runs (save / close) or is undone.
+                    links += factory.seq(
+                        factory.smallScaledIcon(AllIcons.General.Information),
+                        factory.smallText(" Pending: ${PendingChanges.label(queued)}"),
                     )
-                }
-                val candidates = buckets?.candidates().orEmpty()
-                candidates.forEach { c ->
-                    val label = UpdateLabel.chip(c.version.raw, c.kind.label, single = candidates.size == 1)
-                    links += link(AllIcons.Actions.Download, label) { LibmanOps.update(project, ctx.manifestDir, ctx.id.name, to = c.version.raw) }
-                }
-                // AllIcons.Actions.GC is the trash-bin glyph (expui/general/delete.svg).
-                links += link(AllIcons.Actions.GC, "Remove") {
-                    // Remove deletes the library's files; confirm before the destructive step.
-                    val confirmed = Messages.showYesNoDialog(
-                        project,
-                        "Remove \"${ctx.id.name}\" and delete its files?",
-                        "Remove Library",
-                        Messages.getQuestionIcon(),
-                    ) == Messages.YES
-                    if (confirmed) LibmanOps.uninstall(project, ctx.manifestDir, ctx.id.name)
+                    links += link(AllIcons.Actions.Undo, "Undo") { pending.cancel(ctx.manifestDir, ctx.id.name) }
+                } else {
+                    val recheck = { service.refreshInBackground(ctx.provider, ctx.id.name) }
+                    // A failed lookup must not look like "up to date": show it, with the reason on hover.
+                    val failure = service.getFailure(ctx.provider, ctx.id.name)
+                    links += if (failure == null) {
+                        link(AllIcons.Actions.Refresh, "Check for updates", recheck)
+                    } else {
+                        factory.withTooltip(
+                            "Could not check for updates: $failure",
+                            link(AllIcons.General.Warning, "Check failed. Retry", recheck),
+                        )
+                    }
+                    val candidates = buckets?.candidates().orEmpty()
+                    candidates.forEach { c ->
+                        val label = UpdateLabel.chip(c.version.raw, c.kind.label, single = candidates.size == 1)
+                        links += link(AllIcons.Actions.Download, label) {
+                            pending.enqueue(ctx.manifestDir, PendingChange.Update(ctx.id.name, c.version.raw))
+                        }
+                    }
+                    // AllIcons.Actions.GC is the trash-bin glyph (expui/general/delete.svg).
+                    links += link(AllIcons.Actions.GC, "Remove") {
+                        // Remove deletes the library's files; confirm before the destructive step.
+                        val confirmed = Messages.showYesNoDialog(
+                            project,
+                            "Remove \"${ctx.id.name}\"? Its files are deleted when you save or close libman.json.",
+                            "Remove Library",
+                            Messages.getQuestionIcon(),
+                        ) == Messages.YES
+                        if (confirmed) pending.enqueue(ctx.manifestDir, PendingChange.Remove(ctx.id.name))
+                    }
                 }
 
                 val row = factory.inset(factory.join(links) { factory.smallText("   ") }, left = leftPad)
