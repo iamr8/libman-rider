@@ -1,12 +1,14 @@
 package com.github.iamr8.libman.provider
 
 import com.github.iamr8.libman.settings.LibmanSettings
+import com.github.iamr8.libman.util.OptionalApiCall
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -107,13 +109,22 @@ class LibmanCatalogService(private val project: Project) {
                 // without editing the file, so a plain daemon restart re-runs the annotator (recolors
                 // the version) but leaves the "Update to X" inlay stale. Clearing the stamp in the
                 // same EDT transaction as the restart forces the inlay to recompute too.
-                InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
+                // The class is platform impl API; if a future IDE removes it, skip it (the restart
+                // still recolors the version, only the inlay may stay stale until the next edit).
+                forceInlayUpdate.run { InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass() }
                 DaemonCodeAnalyzer.getInstance(project).restart()
             }
         }, ModalityState.any())
     }
 
     companion object {
+        private val LOG = Logger.getInstance(LibmanCatalogService::class.java)
+
+        // One per IDE session: the API is either there or not, so warn once, not per refresh.
+        private val forceInlayUpdate = OptionalApiCall { e ->
+            LOG.warn("Inlay refresh API is not available in this IDE; inlays refresh on the next edit only", e)
+        }
+
         fun getInstance(project: Project): LibmanCatalogService = project.service()
     }
 }
