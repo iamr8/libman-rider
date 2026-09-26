@@ -28,21 +28,32 @@ class UpdateBucketsTest {
         assertEquals(listOf(UpdateKind.PATCH, UpdateKind.MINOR, UpdateKind.MAJOR), kinds)
     }
 
-    @Test fun `prerelease offered next to stable even when lower than best stable`() {
-        // 4.0.0 stable exists and 4.0.0-rc.2 is lower, but it is newer than 3.7.1 -> offer both.
+    @Test fun `prerelease hidden when not above the newest stable`() {
+        // 4.0.0 stable exists and 4.0.0-rc.2 is lower -> only the stable chips.
         val b = UpdateBuckets.compute("3.7.1", available, includePrerelease = true)
         assertEquals("4.0.0", b.major?.raw)
-        assertEquals("4.0.0-rc.2", b.prerelease?.raw)
-        assertEquals(
-            listOf(UpdateKind.PATCH, UpdateKind.MINOR, UpdateKind.MAJOR, UpdateKind.PRERELEASE),
-            b.candidates().map { it.kind },
-        )
+        assertNull(b.prerelease)
+        assertEquals(listOf(UpdateKind.PATCH, UpdateKind.MINOR, UpdateKind.MAJOR), b.candidates().map { it.kind })
     }
 
-    @Test fun `prerelease of the same core as the stable update is offered`() {
+    @Test fun `older prerelease line is hidden when a newer major is stable`() {
+        // Chart.js: on 3.9.1, with 4.5.1 stable and an old 4.0.0-release pre-release.
+        val b = UpdateBuckets.compute("3.9.1", listOf("3.9.1", "4.0.0-release", "4.5.1"), includePrerelease = true)
+        assertEquals("4.5.1", b.major?.raw)
+        assertNull(b.prerelease)
+    }
+
+    @Test fun `prerelease below the stable update of the same core is hidden`() {
         val b = UpdateBuckets.compute("3.7.1", listOf("3.7.2-rc.1", "3.7.2"), includePrerelease = true)
         assertEquals("3.7.2", b.patch?.raw)
-        assertEquals("3.7.2-rc.1", b.prerelease?.raw)
+        assertNull(b.prerelease)
+    }
+
+    @Test fun `prerelease shown next to stable when above the newest stable`() {
+        val b = UpdateBuckets.compute("3.7.1", listOf("3.7.2", "4.0.0-beta.1"), includePrerelease = true)
+        assertEquals("3.7.2", b.patch?.raw)
+        assertEquals("4.0.0-beta.1", b.prerelease?.raw)
+        assertEquals(listOf(UpdateKind.PATCH, UpdateKind.PRERELEASE), b.candidates().map { it.kind })
     }
 
     @Test fun `prerelease offered when no stable update exists`() {
