@@ -1,6 +1,7 @@
 package com.github.iamr8.libman.provider
 
 import com.github.iamr8.libman.settings.LibmanSettings
+import com.github.iamr8.libman.util.BoundedParallel
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.application.ApplicationManager
@@ -13,6 +14,7 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.progress.impl.BackgroundableProcessIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.concurrency.AppExecutorUtil
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -79,9 +81,15 @@ class LibmanCatalogService(private val project: Project) {
         val task = object : Task.Backgroundable(project, "Checking client-side libraries", true) {
             override fun run(indicator: ProgressIndicator) {
                 try {
-                    for ((provider, name) in entries) {
-                        indicator.checkCanceled()
-                        refreshNow(provider, name)
+                    // A few lookups at a time, so a large manifest isn't N sequential calls. Each one
+                    // runs under this task's indicator, so a file close cancels its download too.
+                    BoundedParallel.forEach(
+                        entries,
+                        SWEEP_PARALLELISM,
+                        AppExecutorUtil.getAppExecutorService(),
+                        indicator::checkCanceled,
+                    ) { (provider, name) ->
+                        ProgressManager.getInstance().executeProcessUnderProgress({ refreshNow(provider, name) }, indicator)
                     }
                     requestRefresh()
                 } finally {
@@ -126,6 +134,9 @@ class LibmanCatalogService(private val project: Project) {
         "${provider?.trim()?.lowercase().orEmpty()}::$name"
 
     companion object {
+        // Parallel catalog lookups per open-file sweep.
+        private const val SWEEP_PARALLELISM = 4
+
         fun getInstance(project: Project): LibmanCatalogService = project.service()
     }
 }

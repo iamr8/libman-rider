@@ -12,6 +12,8 @@ All notable changes to this plugin are documented here. Format follows
 
 ### Changed
 - The plugin now loads only in Rider.
+- Opening `libman.json` checks up to 4 libraries at a time, not one by one, so a large manifest
+  shows its updates sooner. Closing the file still cancels the check.
 
 ## [0.1.0]
 
