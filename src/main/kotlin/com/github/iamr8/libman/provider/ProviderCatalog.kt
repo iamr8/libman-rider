@@ -23,11 +23,11 @@ object ProviderCatalog {
 
     fun isSupported(provider: String?): Boolean = normalize(provider) != "filesystem"
 
-    /** Fetches versions + description, or `null` on any failure / unsupported provider. */
-    fun fetch(provider: String?, name: String): LibInfo? {
+    /** Fetches versions + description, or why that failed (network, HTTP status, bad payload). */
+    fun fetch(provider: String?, name: String): CatalogFetch {
         val p = normalize(provider)
         val url = when (p) {
-            "filesystem" -> return null
+            "filesystem" -> return CatalogFetch.Failed("the filesystem provider has no catalog")
             "unpkg" -> npmUrl(name)
             "jsdelivr" -> if (isGitHubForm(name)) jsdelivrGhUrl(name) else npmUrl(name)
             else -> cdnjsUrl(name) // cdnjs + unknown default to cdnjs
@@ -42,14 +42,17 @@ object ProviderCatalog {
                 .readString(ProgressManager.getInstance().progressIndicator)
         } catch (e: ProcessCanceledException) {
             throw e // cancellation must propagate so the task stops and is not logged as a failure
+        } catch (e: HttpRequests.HttpStatusException) {
+            return CatalogFetch.Failed(FetchFailures.forStatus(e.statusCode))
         } catch (e: Exception) {
-            return null
+            return CatalogFetch.Failed(FetchFailures.describe(e))
         }
-        return when (p) {
+        val info = when (p) {
             "unpkg" -> CatalogParsers.parseNpm(body)
             "jsdelivr" -> if (isGitHubForm(name)) CatalogParsers.parseJsdelivr(body) else CatalogParsers.parseNpm(body)
             else -> CatalogParsers.parseCdnjs(body)
         }
+        return info?.let { CatalogFetch.Found(it) } ?: CatalogFetch.Failed(FetchFailures.UNEXPECTED_RESPONSE)
     }
 
     /** The provider's human-facing page for the library, or `null` when there isn't one. */

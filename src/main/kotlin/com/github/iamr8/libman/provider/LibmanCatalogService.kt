@@ -30,38 +30,32 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Service(Service.Level.PROJECT)
 class LibmanCatalogService(private val project: Project) {
 
-    private data class Entry(val info: LibInfo?, val at: Long)
-
-    private val cache = ConcurrentHashMap<String, Entry>()
+    private val cache = CatalogCache(
+        fetch = ProviderCatalog::fetch,
+        ttlMillis = { LibmanSettings.getInstance().cacheTtlMinutes * 60_000L },
+    )
     private val refreshPending = AtomicBoolean(false)
 
     // One open-file sweep at a time per manifest: the entry both guards against a close+reopen
     // double-check and holds the indicator so a file close can cancel its in-flight sweep.
     private val sweeps = ConcurrentHashMap<VirtualFile, ProgressIndicator>()
 
-    /** Fresh cached info, or null if missing/expired (never triggers a fetch). */
-    fun getCached(provider: String?, name: String): LibInfo? =
-        cache[key(provider, name)]?.takeIf { fresh(it) }?.info
+    /** Fresh cached info, or null if missing/expired/failed (never triggers a fetch). */
+    fun getCached(provider: String?, name: String): LibInfo? = cache.info(provider, name)
+
+    /** Why the last lookup failed, or null if it did not fail (never triggers a fetch). */
+    fun getFailure(provider: String?, name: String): String? = cache.error(provider, name)
 
     /**
      * Cached-if-fresh, else fetch now (blocking). Off-EDT only. Does NOT trigger a UI refresh -
      * the calling task calls [requestRefresh] once it has filled the cache.
      */
-    fun getOrFetch(provider: String?, name: String): LibInfo? {
-        val k = key(provider, name)
-        cache[k]?.let { if (fresh(it)) return it.info }
-        val info = ProviderCatalog.fetch(provider, name)
-        cache[k] = Entry(info, System.currentTimeMillis())
-        return info
-    }
+    fun getOrFetch(provider: String?, name: String): LibInfo? = cache.getOrFetch(provider, name)
 
-    /** Drop the cached entry and fetch again (blocking). Off-EDT only. */
-    fun refreshNow(provider: String?, name: String): LibInfo? {
-        cache.remove(key(provider, name))
-        return getOrFetch(provider, name)
-    }
+    /** Fetch again and replace the cached entry (blocking). Off-EDT only. */
+    fun refreshNow(provider: String?, name: String): LibInfo? = cache.refresh(provider, name)
 
-    /** Drop the cached entry and re-fetch on a background thread (the manual "Check for updates"). */
+    /** Re-fetch on a background thread (the manual "Check for updates"). */
     fun refreshInBackground(provider: String?, name: String) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Checking $name for updates", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -122,12 +116,6 @@ class LibmanCatalogService(private val project: Project) {
             }
         }, ModalityState.any())
     }
-
-    private fun fresh(e: Entry): Boolean =
-        System.currentTimeMillis() - e.at < LibmanSettings.getInstance().cacheTtlMinutes * 60_000L
-
-    private fun key(provider: String?, name: String): String =
-        "${provider?.trim()?.lowercase().orEmpty()}::$name"
 
     companion object {
         private val LOG = Logger.getInstance(LibmanCatalogService::class.java)

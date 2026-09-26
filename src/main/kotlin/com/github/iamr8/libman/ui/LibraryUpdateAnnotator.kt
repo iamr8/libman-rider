@@ -60,7 +60,13 @@ class LibraryUpdateAnnotator :
         // cancellable open-sweep and "Check for updates" tasks, which call requestRefresh() to
         // re-run this pass once fresh data lands.
         return collectedInfo.entries.flatMap { e ->
-            val info = service.getCached(e.provider, e.name) ?: return@flatMap emptyList()
+            val info = service.getCached(e.provider, e.name)
+            if (info == null) {
+                // A failed lookup gets a hover note on the version, so it doesn't read as "up to date".
+                val failure = service.getFailure(e.provider, e.name) ?: return@flatMap emptyList()
+                val tip = "LibMan: could not check for updates - $failure"
+                return@flatMap listOf(Result(e.versionRange ?: e.nameRange, tip, highlight = false))
+            }
             val out = mutableListOf<Result>()
 
             // Description tooltip on the library name.
