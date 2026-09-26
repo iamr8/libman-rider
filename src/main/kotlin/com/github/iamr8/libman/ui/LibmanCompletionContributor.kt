@@ -22,7 +22,6 @@ import com.intellij.json.psi.JsonStringLiteral
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.util.concurrency.AppExecutorUtil
 import java.util.concurrent.Callable
@@ -70,12 +69,6 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 completeFiles(entry, literal.parent as JsonArray, literal, original, typed, service, result)
         }
     }
-
-    // Open the popup right after the version `@` and after a `/` in a path.
-    override fun invokeAutoPopup(position: PsiElement, typeChar: Char): Boolean =
-        (typeChar == '@' || typeChar == '/') &&
-            ManifestPsi.isManifest(position.containingFile) &&
-            (position.parent is JsonStringLiteral || position is JsonStringLiteral)
 
     private fun completeLibrary(
         entry: JsonObject,
