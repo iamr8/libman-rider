@@ -66,6 +66,9 @@ intellijPlatform {
     // multi-GB download:
     //   -PverifierIdes=current -> the current Rider only (the PR check).
     //   (default)              -> the whole supported range (compatibility.yml).
+    // It also guards the impl API behind the inlay refresh (InlayHintsPassFactoryInternal): the call
+    // is direct, not reflection, so a removed class or method fails this check as a compatibility
+    // problem before users see it.
     pluginVerification {
         ides {
             if (providers.gradleProperty("verifierIdes").orNull == "current") {

@@ -1,8 +1,10 @@
 package com.github.iamr8.libman.provider
 
+import com.github.iamr8.libman.util.HttpValidators
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.util.io.HttpRequests
+import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -23,34 +25,55 @@ object ProviderCatalog {
 
     fun isSupported(provider: String?): Boolean = normalize(provider) != "filesystem"
 
-    /** Fetches versions + description, or `null` on any failure / unsupported provider. */
-    fun fetch(provider: String?, name: String): LibInfo? {
+    /**
+     * Fetches versions + description, or why that failed (network, HTTP status, bad payload).
+     * With [validators] from an earlier response, the request is conditional, and an unchanged
+     * catalog comes back as [CatalogFetch.NotModified] (no body downloaded).
+     */
+    fun fetch(provider: String?, name: String, validators: HttpValidators?): CatalogFetch {
         val p = normalize(provider)
         val url = when (p) {
-            "filesystem" -> return null
+            "filesystem" -> return CatalogFetch.Failed("the filesystem provider has no catalog")
             "unpkg" -> npmUrl(name)
             "jsdelivr" -> if (isGitHubForm(name)) jsdelivrGhUrl(name) else npmUrl(name)
             else -> cdnjsUrl(name) // cdnjs + unknown default to cdnjs
         }
-        val body = try {
+        val response = try {
             HttpRequests.request(url)
                 .accept("application/json")
                 .connectTimeout(TIMEOUT_MS)
                 .readTimeout(TIMEOUT_MS)
-                // Pass the running task's indicator so the download honors cancel; the read loop only
-                // checks cancellation when the indicator is non-null. It is null off a task (e.g. tests).
-                .readString(ProgressManager.getInstance().progressIndicator)
+                .tuner { c -> validators?.requestHeaders()?.forEach { (k, v) -> c.setRequestProperty(k, v) } }
+                .connect { request ->
+                    // HttpRequests returns a 304 as a normal connection (no exception, empty body).
+                    val http = request.connection as? HttpURLConnection
+                    if (http?.responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) return@connect null
+                    Response(
+                        // Pass the running task's indicator so the download honors cancel; the read loop
+                        // only checks cancellation when the indicator is non-null. It is null off a task.
+                        request.readString(ProgressManager.getInstance().progressIndicator),
+                        HttpValidators.of(http?.getHeaderField("ETag"), http?.getHeaderField("Last-Modified")),
+                    )
+                }
         } catch (e: ProcessCanceledException) {
             throw e // cancellation must propagate so the task stops and is not logged as a failure
+        } catch (e: HttpRequests.HttpStatusException) {
+            return CatalogFetch.Failed(FetchFailures.forStatus(e.statusCode))
         } catch (e: Exception) {
-            return null
+            return CatalogFetch.Failed(FetchFailures.describe(e))
         }
-        return when (p) {
+        if (response == null) return CatalogFetch.NotModified
+        val body = response.body
+        val info = when (p) {
             "unpkg" -> CatalogParsers.parseNpm(body)
             "jsdelivr" -> if (isGitHubForm(name)) CatalogParsers.parseJsdelivr(body) else CatalogParsers.parseNpm(body)
             else -> CatalogParsers.parseCdnjs(body)
         }
+        return info?.let { CatalogFetch.Found(it, response.validators) }
+            ?: CatalogFetch.Failed(FetchFailures.UNEXPECTED_RESPONSE)
     }
+
+    private class Response(val body: String, val validators: HttpValidators?)
 
     /** The provider's human-facing page for the library, or `null` when there isn't one. */
     fun pageUrl(provider: String?, name: String): String? = when (normalize(provider)) {

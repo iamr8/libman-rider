@@ -2,12 +2,14 @@ package com.github.iamr8.libman.provider
 
 import com.github.iamr8.libman.settings.LibmanSettings
 import com.github.iamr8.libman.util.BoundedParallel
+import com.github.iamr8.libman.util.OptionalApiCall
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.codeInsight.daemon.impl.InlayHintsPassFactoryInternal
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -30,38 +32,32 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Service(Service.Level.PROJECT)
 class LibmanCatalogService(private val project: Project) {
 
-    private data class Entry(val info: LibInfo?, val at: Long)
-
-    private val cache = ConcurrentHashMap<String, Entry>()
+    private val cache = CatalogCache(
+        fetch = ProviderCatalog::fetch,
+        ttlMillis = { LibmanSettings.getInstance().cacheTtlMinutes * 60_000L },
+    )
     private val refreshPending = AtomicBoolean(false)
 
     // One open-file sweep at a time per manifest: the entry both guards against a close+reopen
     // double-check and holds the indicator so a file close can cancel its in-flight sweep.
     private val sweeps = ConcurrentHashMap<VirtualFile, ProgressIndicator>()
 
-    /** Fresh cached info, or null if missing/expired (never triggers a fetch). */
-    fun getCached(provider: String?, name: String): LibInfo? =
-        cache[key(provider, name)]?.takeIf { fresh(it) }?.info
+    /** Fresh cached info, or null if missing/expired/failed (never triggers a fetch). */
+    fun getCached(provider: String?, name: String): LibInfo? = cache.info(provider, name)
+
+    /** Why the last lookup failed, or null if it did not fail (never triggers a fetch). */
+    fun getFailure(provider: String?, name: String): String? = cache.error(provider, name)
 
     /**
      * Cached-if-fresh, else fetch now (blocking). Off-EDT only. Does NOT trigger a UI refresh -
      * the calling task calls [requestRefresh] once it has filled the cache.
      */
-    fun getOrFetch(provider: String?, name: String): LibInfo? {
-        val k = key(provider, name)
-        cache[k]?.let { if (fresh(it)) return it.info }
-        val info = ProviderCatalog.fetch(provider, name)
-        cache[k] = Entry(info, System.currentTimeMillis())
-        return info
-    }
+    fun getOrFetch(provider: String?, name: String): LibInfo? = cache.getOrFetch(provider, name)
 
-    /** Drop the cached entry and fetch again (blocking). Off-EDT only. */
-    fun refreshNow(provider: String?, name: String): LibInfo? {
-        cache.remove(key(provider, name))
-        return getOrFetch(provider, name)
-    }
+    /** Fetch again and replace the cached entry (blocking). Off-EDT only. */
+    fun refreshNow(provider: String?, name: String): LibInfo? = cache.refresh(provider, name)
 
-    /** Drop the cached entry and re-fetch on a background thread (the manual "Check for updates"). */
+    /** Re-fetch on a background thread (the manual "Check for updates"). */
     fun refreshInBackground(provider: String?, name: String) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Checking $name for updates", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -121,21 +117,24 @@ class LibmanCatalogService(private val project: Project) {
                 // without editing the file, so a plain daemon restart re-runs the annotator (recolors
                 // the version) but leaves the "Update to X" inlay stale. Clearing the stamp in the
                 // same EDT transaction as the restart forces the inlay to recompute too.
-                InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass()
+                // The class is platform impl API; if a future IDE removes it, skip it (the restart
+                // still recolors the version, only the inlay may stay stale until the next edit).
+                forceInlayUpdate.run { InlayHintsPassFactoryInternal.forceHintsUpdateOnNextPass() }
                 DaemonCodeAnalyzer.getInstance(project).restart()
             }
         }, ModalityState.any())
     }
 
-    private fun fresh(e: Entry): Boolean =
-        System.currentTimeMillis() - e.at < LibmanSettings.getInstance().cacheTtlMinutes * 60_000L
-
-    private fun key(provider: String?, name: String): String =
-        "${provider?.trim()?.lowercase().orEmpty()}::$name"
-
     companion object {
         // Parallel catalog lookups per open-file sweep.
         private const val SWEEP_PARALLELISM = 4
+
+        private val LOG = Logger.getInstance(LibmanCatalogService::class.java)
+
+        // One per IDE session: the API is either there or not, so warn once, not per refresh.
+        private val forceInlayUpdate = OptionalApiCall { e ->
+            LOG.warn("Inlay refresh API is not available in this IDE; inlays refresh on the next edit only", e)
+        }
 
         fun getInstance(project: Project): LibmanCatalogService = project.service()
     }
