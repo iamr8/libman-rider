@@ -2,6 +2,7 @@ package com.github.iamr8.libman.settings
 
 import com.github.iamr8.libman.cli.DotnetTool
 import com.github.iamr8.libman.cli.LibmanLocator
+import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.github.iamr8.libman.ui.LibmanInstall
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.ui.DialogPanel
@@ -24,6 +25,7 @@ class LibmanConfigurable : BoundSearchableConfigurable("LibMan", "com.github.iam
         super.apply() // write UI -> work
         work.customLibmanPath = work.customLibmanPath.trim()
         work.cacheTtlMinutes = work.cacheTtlMinutes.coerceIn(1, 1440)
+        work.completionNameLimit = work.completionNameLimit.coerceIn(1, LibraryNameSuggestions.MAX_LIMIT)
         settings.loadState(work.copy())
     }
 
@@ -47,6 +49,20 @@ class LibmanConfigurable : BoundSearchableConfigurable("LibMan", "com.github.iam
                         "How long provider version lookups are cached. After this, the update marks clear " +
                             "until the next check (reopen the file or use Check for updates).",
                     )
+            }
+        }
+        group("Completion") {
+            row("Library names shown (1-${LibraryNameSuggestions.MAX_LIMIT}):") {
+                textField()
+                    .bindText(
+                        { work.completionNameLimit.toString() },
+                        {
+                            work.completionNameLimit = it.trim().toIntOrNull()
+                                ?.coerceIn(1, LibraryNameSuggestions.MAX_LIMIT) ?: LibraryNameSuggestions.LIMIT
+                        },
+                    )
+                    .columns(6)
+                    .comment("The most names in the <code>library</code> completion list. Fewer items keep the popup fast.")
             }
         }
         group("LibMan CLI") {

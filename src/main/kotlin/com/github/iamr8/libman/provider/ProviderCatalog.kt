@@ -1,5 +1,6 @@
 package com.github.iamr8.libman.provider
 
+import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.github.iamr8.libman.util.HttpValidators
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
@@ -22,7 +23,9 @@ import java.nio.charset.StandardCharsets
 object ProviderCatalog {
 
     private const val TIMEOUT_MS = 15_000
-    private const val SEARCH_LIMIT = 20
+    // Names asked per search. Completion keeps those that start with the typed text and shows at
+    // most the limit set in the settings, so ask for its highest value.
+    private const val SEARCH_LIMIT = LibraryNameSuggestions.MAX_LIMIT
 
     fun isSupported(provider: String?): Boolean = normalize(provider) != "filesystem"
 

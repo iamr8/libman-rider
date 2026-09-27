@@ -29,8 +29,9 @@ For each library, right in the editor:
 - **A description tooltip** on the library name, from the provider, with a link to the library's
   page.
 - **Completion** (Ctrl+Space; opens by itself while you type) - library names that start with the
-  typed text (from 3 letters), the 10 newest versions after `@` (pre-releases included),
-  `destination` folders under the manifest's folder, and the library's files in `files`.
+  typed text (from 3 letters), the 10 newest versions after `@` (pre-releases when the setting is on),
+  `destination` folders with the IDE's own path completion, and the library's files in `files`
+  (also in `fileMappings`) that are not on disk yet.
 - **Manifest checks** - a warning on an unknown provider, a warning on a `files` entry the library
   version does not have, and a hint when a newer `libman.json` schema version is available.
 
@@ -38,8 +39,8 @@ Providers supported: **cdnjs**, **unpkg** (npm), and **jsDelivr** (npm + GitHub)
 
 Also:
 
-- **Settings** (Settings | Tools | LibMan): include pre-releases, check-on-open, and cache
-  lifetime.
+- **Settings** (Settings | Tools | LibMan): include pre-releases, check-on-open, cache
+  lifetime, and the most library names in completion.
 - **Context-menu actions** on `libman.json` (Solution Explorer and editor):
   **Restore**, **Clean**, **Manage**.
 - The IDE **suggests this plugin** when you open a `libman.json`.

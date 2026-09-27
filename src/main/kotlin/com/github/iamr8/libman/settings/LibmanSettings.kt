@@ -1,5 +1,6 @@
 package com.github.iamr8.libman.settings
 
+import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -18,6 +19,7 @@ class LibmanSettings : PersistentStateComponent<LibmanSettings.State> {
         // Empty = auto-detect libman on PATH / in ~/.dotnet/tools. Set to override the executable.
         var customLibmanPath: String = "",
         var verbosity: LibmanVerbosity = LibmanVerbosity.NORMAL,
+        var completionNameLimit: Int = LibraryNameSuggestions.LIMIT,
     ) {
         /** Copy every field from [other] in place (keeps UI-DSL bindings on this instance valid). */
         fun assignFrom(other: State) {
@@ -26,6 +28,7 @@ class LibmanSettings : PersistentStateComponent<LibmanSettings.State> {
             cacheTtlMinutes = other.cacheTtlMinutes
             customLibmanPath = other.customLibmanPath
             verbosity = other.verbosity
+            completionNameLimit = other.completionNameLimit
         }
     }
 
@@ -55,6 +58,11 @@ class LibmanSettings : PersistentStateComponent<LibmanSettings.State> {
     var verbosity: LibmanVerbosity
         get() = state.verbosity
         set(v) { state.verbosity = v }
+
+    /** Library names shown at most in completion; clamped to the settings range (1..250). */
+    var completionNameLimit: Int
+        get() = state.completionNameLimit.coerceIn(1, LibraryNameSuggestions.MAX_LIMIT)
+        set(v) { state.completionNameLimit = v.coerceIn(1, LibraryNameSuggestions.MAX_LIMIT) }
 
     /** The `--verbosity` argument to pass to the CLI, or null for the default (no flag). */
     val verbosityArg: String? get() = state.verbosity.arg

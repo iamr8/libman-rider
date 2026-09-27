@@ -7,10 +7,12 @@ All notable changes to this plugin are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- **Completion in `libman.json`**: library names that start with the typed text (from 3 letters),
-  from the provider's search (cdnjs, or npm for unpkg / jsDelivr); the 10 newest versions after `@`,
-  pre-releases included; `destination` / `defaultDestination` folders under the manifest's folder;
-  and the library version's files in `files`.
+- **Completion in `libman.json`**: library names that start with the typed text (from 3 letters;
+  at most 50 by default, set in the settings), from the provider's search (cdnjs, or npm for
+  unpkg / jsDelivr); the 10 newest versions after `@` (pre-releases when the setting is on);
+  `destination` / `defaultDestination` folders with the IDE's own path completion; and the library
+  version's files in `files` (also in `fileMappings`, relative to `root`), without the files
+  already on disk in the destination.
 - A warning on a `files` entry that the library version does not have (glob patterns are not
   checked).
 

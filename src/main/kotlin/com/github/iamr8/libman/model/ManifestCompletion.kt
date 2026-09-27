@@ -23,22 +23,29 @@ object LibraryNameSuggestions {
     /** Letters needed before the provider is searched. */
     const val MIN_PREFIX = 3
 
+    /** Default of the names shown at most, so a broad prefix does not fill the popup with hundreds of items. */
+    const val LIMIT = 50
+
+    /** The highest limit the settings accept (the provider is asked for this many). */
+    const val MAX_LIMIT = 250
+
     fun canSearch(prefix: String): Boolean = prefix.trim().length >= MIN_PREFIX
 
-    /** The [items] whose name starts with [prefix] (case-insensitive), in their order. */
-    fun <T> startingWith(items: List<T>, prefix: String, name: (T) -> String): List<T> =
-        items.filter { name(it).startsWith(prefix.trim(), ignoreCase = true) }
+    /** The first [limit] [items] whose name starts with [prefix] (case-insensitive), in their order. */
+    fun <T> startingWith(items: List<T>, prefix: String, limit: Int = LIMIT, name: (T) -> String): List<T> =
+        items.asSequence().filter { name(it).startsWith(prefix.trim(), ignoreCase = true) }.take(limit).toList()
 }
 
-/** Versions to offer after `@`: the newest first, pre-releases included. Pure for unit testing. */
+/** Versions to offer after `@`: the newest first. Pure for unit testing. */
 object VersionSuggestions {
 
     const val LIMIT = 10
 
-    /** The newest [limit] versions, newest first; unparseable versions are left out. */
-    fun latest(versions: List<String>, limit: Int = LIMIT): List<String> =
+    /** The newest [limit] versions, newest first. Pre-releases only when [includePrerelease]; unparseable versions are left out. */
+    fun latest(versions: List<String>, includePrerelease: Boolean, limit: Int = LIMIT): List<String> =
         versions.asSequence()
             .mapNotNull { SemVer.parse(it) }
+            .filter { includePrerelease || !it.isPrerelease }
             .distinctBy { it.raw }
             .sortedDescending()
             .take(limit)
@@ -54,6 +61,20 @@ object ManifestFiles {
 
     /** A provider file path in the form `files` uses: no leading `/`. */
     fun normalize(path: String): String = path.trim().removePrefix("/")
+
+    /** A `destination` folder path (relative to `libman.json`, `/` separators per the schema) without a trailing `/`. */
+    fun normalizeDir(path: String): String = path.trim().trimEnd('/')
+
+    /**
+     * The [files] under a `fileMappings` [root], relative to it (a mapping's `files` are relative to
+     * its root). No root means the library root: every file, normalized.
+     */
+    fun underRoot(files: List<String>, root: String?): List<String> {
+        val dir = root?.trim()?.trim('/').orEmpty()
+        if (dir.isEmpty()) return files.map { normalize(it) }
+        val prefix = "$dir/"
+        return files.map { normalize(it) }.filter { it.startsWith(prefix) }.map { it.removePrefix(prefix) }
+    }
 
     /** The entries of [listed] that are not in [available] (patterns and blanks are skipped). */
     fun missing(listed: List<String>, available: Collection<String>): List<String> {

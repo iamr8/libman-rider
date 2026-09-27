@@ -1,6 +1,5 @@
 package com.github.iamr8.libman.ui
 
-import com.github.iamr8.libman.model.DestinationDirs
 import com.github.iamr8.libman.model.LibraryId
 import com.github.iamr8.libman.model.LibraryInput
 import com.github.iamr8.libman.model.LibraryNameSuggestions
@@ -8,6 +7,7 @@ import com.github.iamr8.libman.model.ManifestFiles
 import com.github.iamr8.libman.model.VersionSuggestions
 import com.github.iamr8.libman.provider.LibmanCatalogService
 import com.github.iamr8.libman.provider.LibraryVersionRef
+import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionResultSet
@@ -15,7 +15,6 @@ import com.intellij.codeInsight.completion.PlainPrefixMatcher
 import com.intellij.codeInsight.completion.PrioritizedLookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.json.psi.JsonArray
-import com.intellij.json.psi.JsonFile
 import com.intellij.json.psi.JsonObject
 import com.intellij.json.psi.JsonProperty
 import com.intellij.json.psi.JsonStringLiteral
@@ -32,9 +31,11 @@ import java.util.concurrent.TimeoutException
 /**
  * Completion inside `libman.json` values, like Visual Studio's LibMan:
  *  - `library`: library names that start with the typed text (from 3 letters), from the provider's
- *    search; after the version `@`, its newest versions (pre-releases included).
- *  - `destination` / `defaultDestination`: folders under the manifest's folder.
- *  - `files`: the files of the entry's library version (the ones not listed yet).
+ *    search; after the version `@`, its newest versions.
+ *  - `files` (of an entry or a `fileMappings` item): the files of the library version that are not
+ *    listed yet and not on disk in the destination. A mapping's files are relative to its `root`.
+ * `destination` / `defaultDestination` folders come from [LibmanReferenceContributor] (the IDE's
+ * own path completion).
  *
  * Provider data comes from [LibmanCatalogService] (cache first). A network call runs on a pooled
  * thread; this thread only waits and checks for cancel, so typing (a write action) or closing the
@@ -58,16 +59,15 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 entry != null && ManifestPsi.isLibraryEntry(entry) ->
                 completeLibrary(entry, original, typed, service, result)
 
-            property != null && property.value == literal && (
-                (property.name == "destination" && entry != null && ManifestPsi.isLibraryEntry(entry)) ||
-                    // The completion copy's root (entry is from the copy, not the original file).
-                    (property.name == "defaultDestination" && entry == (literal.containingFile as? JsonFile)?.topLevelValue)
-                ) ->
-                original.virtualFile?.parent?.let { completeFolders(it, typed, result) }
-
-            literal.parent is JsonArray && (literal.parent.parent as? JsonProperty)?.name == "files" &&
-                entry != null && ManifestPsi.isLibraryEntry(entry) ->
-                completeFiles(entry, literal.parent as JsonArray, literal, original, typed, service, result)
+            literal.parent is JsonArray && (literal.parent.parent as? JsonProperty)?.name == "files" && entry != null -> {
+                val array = literal.parent as JsonArray
+                if (ManifestPsi.isLibraryEntry(entry)) {
+                    completeFiles(entry, null, array, literal, original, typed, service, result)
+                } else {
+                    // A `fileMappings` item (schema 3.0) of a library entry.
+                    ManifestPsi.mappingEntry(entry)?.let { completeFiles(it, entry, array, literal, original, typed, service, result) }
+                }
+            }
         }
     }
 
@@ -88,7 +88,7 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 rs.restartCompletionOnAnyPrefixChange()
                 if (!LibraryNameSuggestions.canSearch(input.prefix)) return
                 val found = awaitCancellable { service.search(provider, input.prefix) } ?: return
-                val hits = LibraryNameSuggestions.startingWith(found, input.prefix) { it.name }
+                val hits = LibraryNameSuggestions.startingWith(found, input.prefix, LibmanSettings.getInstance().completionNameLimit) { it.name }
                 hits.forEachIndexed { i, hit ->
                     val element = LookupElementBuilder.create(hit.name)
                         .withTypeText(hit.version, true)
@@ -101,7 +101,7 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 val info = service.getCached(provider, input.name)
                     ?: awaitCancellable { service.getOrFetch(provider, input.name) }
                     ?: return
-                val versions = VersionSuggestions.latest(info.versions)
+                val versions = VersionSuggestions.latest(info.versions, LibmanSettings.getInstance().includePrereleases)
                 versions.forEachIndexed { i, v ->
                     rs.addElement(PrioritizedLookupElement.withPriority(LookupElementBuilder.create(v), (versions.size - i).toDouble()))
                 }
@@ -109,24 +109,9 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
         }
     }
 
-    private fun completeFolders(base: VirtualFile, typed: String, result: CompletionResultSet) {
-        val rs = result.withPrefixMatcher(PlainPrefixMatcher(typed))
-        val found = mutableListOf<String>()
-        fun walk(dir: VirtualFile, path: String, depth: Int) {
-            for (child in dir.children) {
-                if (found.size >= MAX_FOLDERS) return
-                if (!child.isDirectory || DestinationDirs.skip(child.name)) continue
-                val rel = "$path${child.name}/"
-                found += rel
-                if (depth < MAX_FOLDER_DEPTH) walk(child, rel, depth + 1)
-            }
-        }
-        walk(base, "", 1)
-        found.forEach { rs.addElement(LookupElementBuilder.create(it)) }
-    }
-
     private fun completeFiles(
         entry: JsonObject,
+        mapping: JsonObject?,
         array: JsonArray,
         literal: JsonStringLiteral,
         original: PsiFile,
@@ -141,15 +126,26 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
         val files = service.getCachedFiles(ref)
             ?: awaitCancellable { service.getOrFetchFiles(ref, retryFailed = true) }
             ?: return
+        val offered = if (mapping == null) files else ManifestFiles.underRoot(files, ManifestPsi.mappingRoot(mapping))
         val listed = array.valueList.filterIsInstance<JsonStringLiteral>()
             .filter { it != literal }
             .mapTo(HashSet()) { ManifestFiles.normalize(it.value) }
+        // Files already installed in the destination are not offered. A mapping without its own
+        // destination uses the library's (schema).
+        val destination = mapping?.let { ManifestPsi.mappingDestination(it) }
+            ?: ManifestPsi.effectiveDestination(entry, original, ctx.id)
+        val installed = destination?.let { dest -> original.virtualFile?.parent?.let { destinationDir(it, dest) } }
         val rs = result.withPrefixMatcher(PlainPrefixMatcher(typed))
-        files.asSequence()
+        offered.asSequence()
             .filter { it !in listed }
+            .filter { installed?.findFileByRelativePath(ManifestFiles.normalize(it)) == null }
             .take(MAX_FILES)
             .forEach { rs.addElement(LookupElementBuilder.create(it)) }
     }
+
+    /** The [destination] folder, relative to the manifest's folder (schema). Null when it does not exist. */
+    private fun destinationDir(manifestDir: VirtualFile, destination: String): VirtualFile? =
+        ManifestFiles.normalizeDir(destination).takeIf { it.isNotEmpty() }?.let { manifestDir.findFileByRelativePath(it) }
 
     /** Runs [task] on a pooled thread and waits, checking for cancel (a keystroke, a closed popup). */
     private fun <T> awaitCancellable(task: () -> T): T {
@@ -169,8 +165,6 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
     private companion object {
         const val POLL_MS = 20L
         const val DESCRIPTION_CHARS = 60
-        const val MAX_FOLDERS = 300
-        const val MAX_FOLDER_DEPTH = 4
         const val MAX_FILES = 1000
     }
 }

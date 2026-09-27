@@ -23,8 +23,9 @@
           <li><b>A description tooltip</b> on the library name, from the provider (cdnjs, npm/unpkg,
               jsDelivr), with a link to the library's page.</li>
           <li><b>Completion</b> - library names that start with the typed text (from 3 letters),
-              the 10 newest versions after <code>@</code> (pre-releases included),
-              <code>destination</code> folders, and the library's files in <code>files</code>.</li>
+              the 10 newest versions after <code>@</code> (pre-releases when the setting is on),
+              <code>destination</code> folders with the IDE's own path completion, and the library's
+              files in <code>files</code> that are not on disk yet.</li>
           <li><b>Manifest checks</b> - a warning on an unknown provider, a warning on a
               <code>files</code> entry the library version does not have, and a hint when a newer
               <code>libman.json</code> schema version is available.</li>
@@ -78,10 +79,14 @@
         <!-- Banner on libman.json while it has queued Update/Remove changes: Apply now / Discard. -->
         <editorNotificationProvider implementation="com.github.iamr8.libman.ui.LibmanPendingBanner"/>
 
-        <!-- Completion in libman.json values: library names + versions, destination folders, files. -->
+        <!-- Completion in libman.json values: library names + versions, files. -->
         <completion.contributor
             language="JSON"
             implementationClass="com.github.iamr8.libman.ui.LibmanCompletionContributor"/>
+        <!-- destination / defaultDestination as folder paths: the IDE's own path completion. -->
+        <psi.referenceContributor
+            language="JSON"
+            implementation="com.github.iamr8.libman.ui.LibmanReferenceContributor"/>
         <!-- Opens that completion after the version `@` and after `/` in a path. -->
         <typedHandler implementation="com.github.iamr8.libman.ui.LibmanTypedHandler"/>
 

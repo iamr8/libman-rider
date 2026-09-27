@@ -1,6 +1,7 @@
 package com.github.iamr8.libman.ui
 
 import com.github.iamr8.libman.model.LibraryId
+import com.github.iamr8.libman.model.ManifestDefaults
 import com.intellij.json.psi.JsonArray
 import com.intellij.json.psi.JsonFile
 import com.intellij.json.psi.JsonObject
@@ -50,7 +51,42 @@ object ManifestPsi {
 
     /** The entry's own `provider`, else the manifest `defaultProvider` of [file]. */
     fun effectiveProvider(obj: JsonObject, file: PsiFile): String? =
-        stringValue(obj, "provider") ?: (file as? JsonFile)?.let { defaultProvider(it) }
+        ManifestDefaults.provider(stringValue(obj, "provider"), (file as? JsonFile)?.let { defaultProvider(it) })
+
+    /** The entry's own `destination`, else the manifest `defaultDestination` of [file] (tokens expanded). */
+    fun effectiveDestination(obj: JsonObject, file: PsiFile, id: LibraryId): String? {
+        val root = (file as? JsonFile)?.topLevelValue as? JsonObject
+        return ManifestDefaults.destination(stringValue(obj, "destination"), root?.let { stringValue(it, "defaultDestination") }, id.name, id.version)
+    }
+
+    /**
+     * True for a `destination` value of a library entry or a `fileMappings` item, or the manifest
+     * `defaultDestination`. Works on a completion copy too (it checks the literal's own file).
+     */
+    fun isDestinationValue(literal: JsonStringLiteral): Boolean {
+        val property = literal.parent as? JsonProperty ?: return false
+        if (property.value != literal) return false
+        val owner = property.parent as? JsonObject ?: return false
+        return when (property.name) {
+            "destination" -> isLibraryEntry(owner) || mappingEntry(owner) != null
+            "defaultDestination" -> owner == (literal.containingFile as? JsonFile)?.topLevelValue
+            else -> false
+        }
+    }
+
+    /** The library entry of a `fileMappings` item (schema 3.0), or null when [obj] is not one. */
+    fun mappingEntry(obj: JsonObject): JsonObject? {
+        val array = obj.parent as? JsonArray ?: return null
+        val property = array.parent as? JsonProperty ?: return null
+        if (property.name != "fileMappings") return null
+        return (property.parent as? JsonObject)?.takeIf { isLibraryEntry(it) }
+    }
+
+    /** A `fileMappings` item's `root` (inside the library), or null for the library root. */
+    fun mappingRoot(mapping: JsonObject): String? = stringValue(mapping, "root")
+
+    /** A `fileMappings` item's own `destination`, or null (then the library's destination applies). */
+    fun mappingDestination(mapping: JsonObject): String? = stringValue(mapping, "destination")
 
     /** The `files` values of an entry, each with the range of its text (inside the quotes). */
     fun fileValues(obj: JsonObject): List<Pair<String, TextRange>> {
