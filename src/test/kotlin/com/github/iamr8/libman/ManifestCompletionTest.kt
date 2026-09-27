@@ -1,12 +1,14 @@
 package com.github.iamr8.libman
 
 import com.github.iamr8.libman.model.DestinationDirs
+import com.github.iamr8.libman.model.LibraryId
 import com.github.iamr8.libman.model.LibraryInput
 import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.github.iamr8.libman.model.ManifestFiles
 import com.github.iamr8.libman.model.VersionSuggestions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +38,25 @@ class ManifestCompletionTest {
         val hits = listOf("bootstrap", "angular-bootstrap", "Bootbox", "react-boo", "@types/boom")
         assertEquals(listOf("bootstrap", "Bootbox"), LibraryNameSuggestions.startingWith(hits, "boo") { it })
         assertEquals(listOf("@types/boom"), LibraryNameSuggestions.startingWith(hits, "@types/b") { it })
+    }
+
+    @Test fun `library names - chosen name writes name@version`() {
+        // Another library: its latest version (the one the list shows) replaces the old one.
+        assertEquals("jquery.isotope@3.0.6", LibraryNameSuggestions.chosenValue("jquery.isotope", "3.0.6", LibraryId.parse("jqu@3.7.1", null)))
+        assertEquals("jquery@4.0.0", LibraryNameSuggestions.chosenValue("jquery", "4.0.0", LibraryId.parse("jqu", null)))
+        assertEquals("jquery@4.0.0", LibraryNameSuggestions.chosenValue("jquery", "4.0.0", null))
+        // The same library keeps its version.
+        assertEquals("jquery@3.7.1", LibraryNameSuggestions.chosenValue("jquery", "4.0.0", LibraryId.parse("jquery@3.7.1", null)))
+        // No version known: end in `@`, so the version list can open.
+        assertEquals("bootbox@", LibraryNameSuggestions.chosenValue("bootbox", null, LibraryId.parse("boo@1.0.0", null)))
+    }
+
+    @Test fun `library names - closing quote of the value`() {
+        val line = "\"library\": \"jqu@3.7.1\","
+        assertEquals(line.lastIndexOf('"'), LibraryNameSuggestions.closingQuote(line, line.indexOf("jqu") + 3))
+        val escaped = "\"a\\\"b\" x"
+        assertEquals(5, LibraryNameSuggestions.closingQuote(escaped, 1))
+        assertNull(LibraryNameSuggestions.closingQuote("\"abc\n\"", 1))
     }
 
     @Test fun `library names - at most 50`() {

@@ -34,6 +34,30 @@ object LibraryNameSuggestions {
     /** The first [limit] [items] whose name starts with [prefix] (case-insensitive), in their order. */
     fun <T> startingWith(items: List<T>, prefix: String, limit: Int = LIMIT, name: (T) -> String): List<T> =
         items.asSequence().filter { name(it).startsWith(prefix.trim(), ignoreCase = true) }.take(limit).toList()
+
+    /**
+     * The whole `library` value after [name] is chosen: `name@version`. Another library gets its
+     * [latest] version (the one the list shows); the same library keeps its [current] version. With
+     * no version known, the value ends in `@`, so the version list can open.
+     */
+    fun chosenValue(name: String, latest: String?, current: LibraryId?): String {
+        val kept = current?.version?.takeIf { current.name == name }
+        return "$name@${kept ?: latest.orEmpty()}"
+    }
+
+    /** The offset of the quote that closes the JSON string holding [from], or null when its line has none. */
+    fun closingQuote(text: CharSequence, from: Int): Int? {
+        var i = from
+        while (i < text.length) {
+            when (text[i]) {
+                '\\' -> i++ // skip the escaped character
+                '"' -> return i
+                '\n', '\r' -> return null
+            }
+            i++
+        }
+        return null
+    }
 }
 
 /** Versions to offer after `@`: the newest first. Pure for unit testing. */
