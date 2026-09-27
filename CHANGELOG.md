@@ -7,9 +7,10 @@ All notable changes to this plugin are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- **Completion in `libman.json`**: library names from the provider's search (cdnjs, or npm for
-  unpkg / jsDelivr), the newest 20 versions after `@`, `destination` / `defaultDestination` folders
-  under the manifest's folder, and the library version's files in `files`.
+- **Completion in `libman.json`**: library names that start with the typed text (from 3 letters),
+  from the provider's search (cdnjs, or npm for unpkg / jsDelivr); the 10 newest versions after `@`,
+  pre-releases included; `destination` / `defaultDestination` folders under the manifest's folder;
+  and the library version's files in `files`.
 - A warning on a `files` entry that the library version does not have (glob patterns are not
   checked).
 

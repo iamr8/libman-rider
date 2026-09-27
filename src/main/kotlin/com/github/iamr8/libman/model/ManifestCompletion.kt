@@ -17,16 +17,28 @@ sealed interface LibraryInput {
     }
 }
 
-/** Versions to offer after `@`: the newest first. Pure for unit testing. */
+/** Library names to offer in a `library` value. Pure for unit testing. */
+object LibraryNameSuggestions {
+
+    /** Letters needed before the provider is searched. */
+    const val MIN_PREFIX = 3
+
+    fun canSearch(prefix: String): Boolean = prefix.trim().length >= MIN_PREFIX
+
+    /** The [items] whose name starts with [prefix] (case-insensitive), in their order. */
+    fun <T> startingWith(items: List<T>, prefix: String, name: (T) -> String): List<T> =
+        items.filter { name(it).startsWith(prefix.trim(), ignoreCase = true) }
+}
+
+/** Versions to offer after `@`: the newest first, pre-releases included. Pure for unit testing. */
 object VersionSuggestions {
 
-    const val LIMIT = 20
+    const val LIMIT = 10
 
-    /** The newest [limit] versions, newest first. Pre-releases only when [includePrerelease]; unparseable versions are left out. */
-    fun latest(versions: List<String>, includePrerelease: Boolean, limit: Int = LIMIT): List<String> =
+    /** The newest [limit] versions, newest first; unparseable versions are left out. */
+    fun latest(versions: List<String>, limit: Int = LIMIT): List<String> =
         versions.asSequence()
             .mapNotNull { SemVer.parse(it) }
-            .filter { includePrerelease || !it.isPrerelease }
             .distinctBy { it.raw }
             .sortedDescending()
             .take(limit)

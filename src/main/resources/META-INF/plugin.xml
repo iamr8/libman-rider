@@ -22,9 +22,9 @@
               one.</li>
           <li><b>A description tooltip</b> on the library name, from the provider (cdnjs, npm/unpkg,
               jsDelivr), with a link to the library's page.</li>
-          <li><b>Completion</b> - library names from the provider's search, the newest versions
-              after <code>@</code>, <code>destination</code> folders, and the library's files in
-              <code>files</code>.</li>
+          <li><b>Completion</b> - library names that start with the typed text (from 3 letters),
+              the 10 newest versions after <code>@</code> (pre-releases included),
+              <code>destination</code> folders, and the library's files in <code>files</code>.</li>
           <li><b>Manifest checks</b> - a warning on an unknown provider, a warning on a
               <code>files</code> entry the library version does not have, and a hint when a newer
               <code>libman.json</code> schema version is available.</li>

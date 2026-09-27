@@ -3,11 +3,11 @@ package com.github.iamr8.libman.ui
 import com.github.iamr8.libman.model.DestinationDirs
 import com.github.iamr8.libman.model.LibraryId
 import com.github.iamr8.libman.model.LibraryInput
+import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.github.iamr8.libman.model.ManifestFiles
 import com.github.iamr8.libman.model.VersionSuggestions
 import com.github.iamr8.libman.provider.LibmanCatalogService
 import com.github.iamr8.libman.provider.LibraryVersionRef
-import com.github.iamr8.libman.settings.LibmanSettings
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionResultSet
@@ -31,7 +31,8 @@ import java.util.concurrent.TimeoutException
 
 /**
  * Completion inside `libman.json` values, like Visual Studio's LibMan:
- *  - `library`: library names from the provider's search; after the version `@`, its newest versions.
+ *  - `library`: library names that start with the typed text (from 3 letters), from the provider's
+ *    search; after the version `@`, its newest versions (pre-releases included).
  *  - `destination` / `defaultDestination`: folders under the manifest's folder.
  *  - `files`: the files of the entry's library version (the ones not listed yet).
  *
@@ -81,11 +82,13 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
         if (provider?.trim()?.lowercase() == LibraryId.FILESYSTEM_PROVIDER) return
         when (val input = LibraryInput.parse(typed)) {
             is LibraryInput.Name -> {
-                if (input.prefix.isBlank()) return
-                val rs = result.withPrefixMatcher(input.prefix)
-                // The provider filters by the query, so ask again for every new prefix.
+                val rs = result.withPrefixMatcher(PlainPrefixMatcher(input.prefix, true))
+                // The provider filters by the query, so ask again for every new prefix. Set before
+                // the length check: after an empty auto-popup, typing on opens it again only then.
                 rs.restartCompletionOnAnyPrefixChange()
-                val hits = awaitCancellable { service.search(provider, input.prefix) } ?: return
+                if (!LibraryNameSuggestions.canSearch(input.prefix)) return
+                val found = awaitCancellable { service.search(provider, input.prefix) } ?: return
+                val hits = LibraryNameSuggestions.startingWith(found, input.prefix) { it.name }
                 hits.forEachIndexed { i, hit ->
                     val element = LookupElementBuilder.create(hit.name)
                         .withTypeText(hit.version, true)
@@ -98,7 +101,7 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 val info = service.getCached(provider, input.name)
                     ?: awaitCancellable { service.getOrFetch(provider, input.name) }
                     ?: return
-                val versions = VersionSuggestions.latest(info.versions, LibmanSettings.getInstance().includePrereleases)
+                val versions = VersionSuggestions.latest(info.versions)
                 versions.forEachIndexed { i, v ->
                     rs.addElement(PrioritizedLookupElement.withPriority(LookupElementBuilder.create(v), (versions.size - i).toDouble()))
                 }

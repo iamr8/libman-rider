@@ -28,9 +28,9 @@ For each library, right in the editor:
   the file, or with **Apply now**. **Undo** drops one change, **Discard** drops all.
 - **A description tooltip** on the library name, from the provider, with a link to the library's
   page.
-- **Completion** (Ctrl+Space; opens by itself after `@` and `/`) - library names from the
-  provider's search, the newest versions after `@`, `destination` folders under the manifest's
-  folder, and the library's files in `files`.
+- **Completion** (Ctrl+Space; opens by itself while you type) - library names that start with the
+  typed text (from 3 letters), the 10 newest versions after `@` (pre-releases included),
+  `destination` folders under the manifest's folder, and the library's files in `files`.
 - **Manifest checks** - a warning on an unknown provider, a warning on a `files` entry the library
   version does not have, and a hint when a newer `libman.json` schema version is available.
 

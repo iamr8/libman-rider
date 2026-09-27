@@ -2,6 +2,7 @@ package com.github.iamr8.libman
 
 import com.github.iamr8.libman.model.DestinationDirs
 import com.github.iamr8.libman.model.LibraryInput
+import com.github.iamr8.libman.model.LibraryNameSuggestions
 import com.github.iamr8.libman.model.ManifestFiles
 import com.github.iamr8.libman.model.VersionSuggestions
 import org.junit.Assert.assertEquals
@@ -24,10 +25,31 @@ class ManifestCompletionTest {
         assertEquals(LibraryInput.Version("@types/node", "2"), LibraryInput.parse("@types/node@2"))
     }
 
+    @Test fun `library names - search from 3 letters`() {
+        assertFalse(LibraryNameSuggestions.canSearch(""))
+        assertFalse(LibraryNameSuggestions.canSearch("bo"))
+        assertFalse(LibraryNameSuggestions.canSearch(" bo "))
+        assertTrue(LibraryNameSuggestions.canSearch("boo"))
+    }
+
+    @Test fun `library names - only those starting with the typed text`() {
+        val hits = listOf("bootstrap", "angular-bootstrap", "Bootbox", "react-boo", "@types/boom")
+        assertEquals(listOf("bootstrap", "Bootbox"), LibraryNameSuggestions.startingWith(hits, "boo") { it })
+        assertEquals(listOf("@types/boom"), LibraryNameSuggestions.startingWith(hits, "@types/b") { it })
+    }
+
     @Test fun `versions newest first, limited`() {
         val all = listOf("3.6.0", "4.0.0", "3.7.1", "4.0.0-rc.1", "latest", "3.7.1")
-        assertEquals(listOf("4.0.0", "3.7.1", "3.6.0"), VersionSuggestions.latest(all, includePrerelease = false))
-        assertEquals(listOf("4.0.0", "4.0.0-rc.1"), VersionSuggestions.latest(all, includePrerelease = true, limit = 2))
+        assertEquals(listOf("4.0.0", "4.0.0-rc.1", "3.7.1", "3.6.0"), VersionSuggestions.latest(all))
+        assertEquals(listOf("4.0.0", "4.0.0-rc.1"), VersionSuggestions.latest(all, limit = 2))
+    }
+
+    @Test fun `versions - at most 10, pre-releases included`() {
+        val all = (1..12).map { "1.$it.0" } + listOf("2.0.0-alpha.1", "2.0.0-beta.2", "2.0.0-rc.1")
+        assertEquals(
+            listOf("2.0.0-rc.1", "2.0.0-beta.2", "2.0.0-alpha.1", "1.12.0", "1.11.0", "1.10.0", "1.9.0", "1.8.0", "1.7.0", "1.6.0"),
+            VersionSuggestions.latest(all),
+        )
     }
 
     @Test fun `files - missing entries`() {
