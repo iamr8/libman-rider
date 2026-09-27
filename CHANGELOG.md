@@ -4,7 +4,7 @@ All notable changes to this plugin are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0]
 
 ### Added
 - **Completion in `libman.json`**: library names that start with the typed text (from 3 letters;
