@@ -8,11 +8,15 @@ import com.github.iamr8.libman.model.VersionSuggestions
 import com.github.iamr8.libman.provider.LibmanCatalogService
 import com.github.iamr8.libman.provider.LibraryVersionRef
 import com.github.iamr8.libman.settings.LibmanSettings
+import com.intellij.codeInsight.AutoPopupController
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionResultSet
+import com.intellij.codeInsight.completion.InsertHandler
+import com.intellij.codeInsight.completion.InsertionContext
 import com.intellij.codeInsight.completion.PlainPrefixMatcher
 import com.intellij.codeInsight.completion.PrioritizedLookupElement
+import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.json.psi.JsonArray
 import com.intellij.json.psi.JsonObject
@@ -31,7 +35,7 @@ import java.util.concurrent.TimeoutException
 /**
  * Completion inside `libman.json` values, like Visual Studio's LibMan:
  *  - `library`: library names that start with the typed text (from 3 letters), from the provider's
- *    search; after the version `@`, its newest versions.
+ *    search (a chosen name writes `name@version`); after the version `@`, its newest versions.
  *  - `files` (of an entry or a `fileMappings` item): the files of the library version that are not
  *    listed yet and not on disk in the destination. A mapping's files are relative to its `root`.
  * `destination` / `defaultDestination` folders come from [LibmanReferenceContributor] (the IDE's
@@ -57,7 +61,7 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
         when {
             property != null && property.value == literal && property.name == "library" &&
                 entry != null && ManifestPsi.isLibraryEntry(entry) ->
-                completeLibrary(entry, original, typed, service, result)
+                completeLibrary(entry, original, typed, (parameters.originalPosition?.parent as? JsonStringLiteral)?.value, service, result)
 
             literal.parent is JsonArray && (literal.parent.parent as? JsonProperty)?.name == "files" && entry != null -> {
                 val array = literal.parent as JsonArray
@@ -75,6 +79,7 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
         entry: JsonObject,
         original: PsiFile,
         typed: String,
+        currentValue: String?,
         service: LibmanCatalogService,
         result: CompletionResultSet,
     ) {
@@ -89,8 +94,10 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
                 if (!LibraryNameSuggestions.canSearch(input.prefix)) return
                 val found = awaitCancellable { service.search(provider, input.prefix) } ?: return
                 val hits = LibraryNameSuggestions.startingWith(found, input.prefix, LibmanSettings.getInstance().completionNameLimit) { it.name }
+                val current = currentValue?.let { LibraryId.parse(it, provider) }
                 hits.forEachIndexed { i, hit ->
                     val element = LookupElementBuilder.create(hit.name)
+                        .withInsertHandler(LibraryValueInsert(LibraryNameSuggestions.chosenValue(hit.name, hit.version, current)))
                         .withTypeText(hit.version, true)
                         .withTailText(hit.description?.let { "  " + it.take(DESCRIPTION_CHARS) }, true)
                     rs.addElement(PrioritizedLookupElement.withPriority(element, (hits.size - i).toDouble()))
@@ -146,6 +153,21 @@ class LibmanCompletionContributor : CompletionContributor(), DumbAware {
     /** The [destination] folder, relative to the manifest's folder (schema). Null when it does not exist. */
     private fun destinationDir(manifestDir: VirtualFile, destination: String): VirtualFile? =
         ManifestFiles.normalizeDir(destination).takeIf { it.isNotEmpty() }?.let { manifestDir.findFileByRelativePath(it) }
+
+    /**
+     * Writes the whole `library` value when a name is chosen, so an old version of another library
+     * does not stay. The name prefix starts right after the opening quote.
+     */
+    private class LibraryValueInsert(private val value: String) : InsertHandler<LookupElement> {
+        override fun handleInsert(context: InsertionContext, item: LookupElement) {
+            val document = context.document
+            val end = LibraryNameSuggestions.closingQuote(document.charsSequence, context.tailOffset) ?: context.tailOffset
+            document.replaceString(context.startOffset, end, value)
+            context.editor.caretModel.moveToOffset(context.startOffset + value.length)
+            // No version known: open the version list after the `@`.
+            if (value.endsWith("@")) AutoPopupController.getInstance(context.project).scheduleAutoPopup(context.editor)
+        }
+    }
 
     /** Runs [task] on a pooled thread and waits, checking for cancel (a keystroke, a closed popup). */
     private fun <T> awaitCancellable(task: () -> T): T {
