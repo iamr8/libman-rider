@@ -43,6 +43,12 @@ jobs:
           # On main, record the dependency graph of this build. The dependency-graph job submits
           # it, so this job keeps a read-only token.
           dependency-graph: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'generate-and-upload' || 'disabled' }}
+          # Keep the Gradle cache under the repo's 10 GB limit: the unpacked IDEs (transforms, about
+          # 7 GB) are not saved. Their zips stay cached, and Gradle unpacks them again. Over the
+          # limit, GitHub deletes entries and the next build finds no cache at all.
+          gradle-home-cache-excludes: |
+            caches/transforms-4
+            caches/*/transforms
 
       # On main, build the EAP version here, so the eap job publishes this zip and does not build
       # again. Version <VERSION>-eap.<yyyyMMdd>.<run>, tag eap-<yyyyMMdd>.<run>.
