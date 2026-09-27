@@ -26,6 +26,10 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # Only the build workflow saves the Gradle cache. Two writers race for the same keys and
+          # save large entries that push each other out of the 10 GB cache.
+          cache-read-only: true
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

@@ -24,6 +24,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      eap: ${{ steps.ver.outputs.eap }}
+      tag: ${{ steps.ver.outputs.tag }}
+      target: ${{ steps.ver.outputs.target }}
     steps:
       - uses: actions/checkout@v7
 
@@ -35,13 +39,35 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # On main, record the dependency graph of this build. The dependency-graph job submits
+          # it, so this job keeps a read-only token.
+          dependency-graph: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'generate-and-upload' || 'disabled' }}
+
+      # On main, build the EAP version here, so the eap job publishes this zip and does not build
+      # again. Version <VERSION>-eap.<yyyyMMdd>.<run>, tag eap-<yyyyMMdd>.<run>.
+      - name: Compute EAP version
+        id: ver
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          date="$(date -u +%Y%m%d)"
+          target="$(cat VERSION)"
+          eap="${target}-eap.${date}.${{ github.run_number }}"
+          {
+            echo "eap=$eap"
+            echo "tag=eap-${date}.${{ github.run_number }}"
+            echo "target=$target"
+          } >> "$GITHUB_OUTPUT"
+          echo "EAP_VERSION=$eap" >> "$GITHUB_ENV"
 
       - name: Test, verify & build
-        run: ./gradlew test verifyPluginProjectConfiguration verifyPluginStructure buildPlugin --stacktrace
+        # verifyPluginStructure also catches a bad EAP version string.
+        run: ./gradlew test verifyPluginProjectConfiguration verifyPluginStructure buildPlugin ${EAP_VERSION:+-PpluginVersion="$EAP_VERSION"} --stacktrace
 
-      # Compatibility check at PR time, against the current Rider only (one IDE download).
+      # Compatibility check at PR time, against the current Rider only (one IDE download). Same
+      # version as above, so the plugin zip is not built again.
       - name: Verify plugin compatibility (current Rider)
-        run: ./gradlew verifyPlugin -PverifierIdes=current --stacktrace
+        run: ./gradlew verifyPlugin -PverifierIdes=current ${EAP_VERSION:+-PpluginVersion="$EAP_VERSION"} --stacktrace
 
       - name: Upload verifier report
         if: failure()
@@ -76,8 +102,8 @@ jobs:
 
   # Every successful build on main is published as an EAP pre-release (GitHub only, NOT the
   # Marketplace) so you can download the zip and install it in Rider for testing. The plugin
-  # version is <VERSION>-eap.<yyyyMMdd>.<run>, so it sorts above the last release and installs
-  # over it. Tag: eap-<yyyyMMdd>.<run>.
+  # version is <VERSION>-eap.<yyyyMMdd>.<run> (VERSION holds the next release), so it sorts above
+  # the last release and installs over it. The build job builds that zip; this job publishes it.
   eap:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -89,29 +115,11 @@ jobs:
         with:
           fetch-depth: 0 # need tags + history for the "PRs since last release" list
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
+      - name: Download EAP plugin
+        uses: actions/download-artifact@v8
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Compute EAP version
-        id: ver
-        run: |
-          date="$(date -u +%Y%m%d)"
-          target="$(cat VERSION)"
-          eap="${target}-eap.${date}.${{ github.run_number }}"
-          tag="eap-${date}.${{ github.run_number }}"
-          echo "eap=$eap"       >> "$GITHUB_OUTPUT"
-          echo "tag=$tag"       >> "$GITHUB_OUTPUT"
-          echo "target=$target" >> "$GITHUB_OUTPUT"
-
-      - name: Build EAP plugin
-        # verifyPluginStructure catches a bad EAP version string here (cheap, no IDE download).
-        run: ./gradlew verifyPluginStructure buildPlugin -PpluginVersion="${{ steps.ver.outputs.eap }}" --stacktrace
+          name: ${{ github.event.repository.name }}
+          path: build/distributions
 
       - name: Collect PRs since last release
         id: prs
@@ -138,15 +146,15 @@ jobs:
       - name: Publish EAP pre-release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: "EAP ${{ steps.ver.outputs.target }} · ${{ steps.ver.outputs.tag }}"
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: "EAP ${{ needs.build.outputs.target }} · ${{ needs.build.outputs.tag }}"
           prerelease: true
           files: build/distributions/*.zip
           body: |
-            **Early-access (EAP) dev build - target version `${{ steps.ver.outputs.target }}`.**
+            **Early-access (EAP) dev build - target version `${{ needs.build.outputs.target }}`.**
             Not published to the JetBrains Marketplace. For local testing only.
 
-            Plugin version: `${{ steps.ver.outputs.eap }}`. Uninstall it before installing a Marketplace release.
+            Plugin version: `${{ needs.build.outputs.eap }}`. Uninstall it before installing a Marketplace release.
 
             ### Install
             Download the `.zip` below, then in Rider:
@@ -154,3 +162,19 @@ jobs:
 
             ### PRs since ${{ steps.prs.outputs.base }}
             ${{ steps.prs.outputs.list }}
+
+  # Submits the dependency graph the build job recorded. It replaces GitHub's automatic dependency
+  # submission, which resolved every dependency again in a job of its own. No checkout: it runs no
+  # repository code, so the write token stays away from the build.
+  dependency-graph:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Dependency Submission API
+    steps:
+      - name: Submit dependency graph
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          dependency-graph: download-and-submit
+          cache-disabled: true
