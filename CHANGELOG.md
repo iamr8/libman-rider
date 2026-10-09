@@ -4,6 +4,13 @@ All notable changes to this plugin are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- A library whose only newer version is a pre-release (for example `bootstrap@5.3.8` with
+  `6.0.0-alpha.1`) is no longer marked outdated. The pre-release chip stays. The mark shows only
+  when a newer stable version exists.
+
 ## [0.2.0]
 
 ### Added
