@@ -1,7 +1,8 @@
 name: Sync release to main
 
-# After a release lands on `release`, open a PR bringing it back to `main` (the VERSION bump, plus
-# any release-only commits) so the branches don't drift.
+# After a release lands on `release`, open a PR bringing it back to `main` (any release-only
+# commits) so the branches don't drift. The VERSION bump is not part of it: the `bump-main` job in
+# release.yml sets VERSION on `main`.
 #
 # The PR is opened from a DISPOSABLE branch (`sync/v<version>-to-main`), not from `release` itself:
 # the repo has delete-branch-on-merge, so merging a head=`release` PR would delete `release` and
@@ -63,4 +64,4 @@ jobs:
             --title "chore: sync main with release (v$VERSION)" \
             --assignee "$ASSIGNEE" \
             --label ci \
-            --body $'Automated sync of `release` → `main` after a release.\n\nOpened from the disposable branch `'"$BRANCH"$'` (mirrors `release`) so merging it — and the repo'"'"'s delete-branch-on-merge — removes only the throwaway, never `release`. Brings the `VERSION` bump back to `main`; main'"'"'s newer workflow changes are preserved by the merge.'
+            --body $'Automated sync of `release` → `main` after a release.\n\nOpened from the disposable branch `'"$BRANCH"$'` (mirrors `release`) so merging it — and the repo'"'"'s delete-branch-on-merge — removes only the throwaway, never `release`. Main'"'"'s newer changes, including its VERSION, are preserved by the merge.'
