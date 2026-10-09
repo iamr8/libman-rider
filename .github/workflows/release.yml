@@ -135,3 +135,33 @@ jobs:
           BODY="$(gh release view "v$VERSION" --json body -q .body)"
           printf '%s\n\n---\n📦 **JetBrains Marketplace:** %s\n' "$BODY" "$MP_URL" \
             | gh release edit "v$VERSION" --notes-file -
+
+  # After a release, move main to the next minor (X.Y.Z -> X.(Y+1).0), so its builds and the next
+  # release use the new version. Skips when main already holds that version or a higher one.
+  # The push uses GITHUB_TOKEN, so it starts no other workflow run.
+  bump-main:
+    needs: [gate, deploy]
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Bump VERSION on main
+        env:
+          RELEASED: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          CURRENT="$(tr -d '[:space:]' < VERSION)"
+          IFS=. read -r MAJOR MINOR _ <<< "${RELEASED%%[-+]*}"
+          NEXT="$MAJOR.$((MINOR + 1)).0"
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$NEXT" | sort -V | tail -n1)" = "$CURRENT" ]; then
+            echo "::notice::main is at $CURRENT, not below $NEXT - nothing to bump."
+            exit 0
+          fi
+          printf '%s' "$NEXT" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump version to $NEXT"
+          git push origin HEAD:main
