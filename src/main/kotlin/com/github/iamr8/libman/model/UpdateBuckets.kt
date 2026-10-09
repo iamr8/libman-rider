@@ -31,6 +31,9 @@ data class UpdateBuckets(
 
     fun hasAny(): Boolean = patch != null || minor != null || major != null || prerelease != null
 
+    /** True when a newer stable exists. A pre-release alone does not make the version outdated. */
+    fun hasStable(): Boolean = patch != null || minor != null || major != null
+
     /** Color for the current-version highlight: the most severe available jump. */
     fun highestColor(): SeverityColor = when {
         major != null || prerelease != null -> SeverityColor.RED

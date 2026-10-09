@@ -96,6 +96,26 @@ class UpdateBucketsTest {
         assertEquals(SeverityColor.GREEN, UpdateBuckets.compute("3.7.1", listOf("3.7.2"), false).highestColor())
     }
 
+    @Test fun `hasStable is false when only a prerelease is newer`() {
+        // bootstrap: on 5.3.8, the only newer version is 6.0.0-alpha.1 -> a chip, but no outdated mark.
+        val b = UpdateBuckets.compute("5.3.8", listOf("5.3.7", "5.3.8", "6.0.0-alpha.1"), includePrerelease = true)
+        assertEquals("6.0.0-alpha.1", b.prerelease?.raw)
+        assertTrue(b.hasAny())
+        assertFalse(b.hasStable())
+    }
+
+    @Test fun `hasStable is true when a newer stable exists next to a prerelease`() {
+        val b = UpdateBuckets.compute("5.3.8", listOf("5.3.9", "6.0.0-alpha.1"), includePrerelease = true)
+        assertEquals("6.0.0-alpha.1", b.prerelease?.raw)
+        assertTrue(b.hasStable())
+    }
+
+    @Test fun `hasStable is true for each stable bucket`() {
+        assertTrue(UpdateBuckets.compute("3.7.1", listOf("3.7.2"), false).hasStable())
+        assertTrue(UpdateBuckets.compute("3.7.1", listOf("3.8.0"), false).hasStable())
+        assertTrue(UpdateBuckets.compute("3.7.1", listOf("4.0.0"), false).hasStable())
+    }
+
     @Test fun `unparseable current yields no updates`() {
         val b = UpdateBuckets.compute("latest", available, includePrerelease = true)
         assertFalse(b.hasAny())

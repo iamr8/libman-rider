@@ -21,7 +21,7 @@ import java.awt.Color
 /**
  * For each library in a `libman.json`: shows the provider's description as a hover tooltip on the
  * library name (with an "Open on <provider>" link), and highlights the version with a single amber
- * background when any update is available. This renders from the [LibmanCatalogService] cache only -
+ * background when a stable update is available. This renders from the [LibmanCatalogService] cache only -
  * it never fetches here. Every network fetch runs in a visible, cancellable background task (the
  * open-file sweep and the per-library "Check for updates" link), so a cold or expired cache simply
  * shows nothing until the next check.
@@ -99,12 +99,13 @@ class LibraryUpdateAnnotator :
                 out += Result(e.nameRange, it, highlight = false)
             }
 
-            // Amber highlight on the version when an update exists.
+            // Amber highlight on the version when a stable update exists.
             if (e.version != null && e.versionRange != null) {
                 val buckets = UpdateBuckets.compute(e.version, info.versions, includePre)
                 if (buckets.hasAny()) {
                     val tip = buckets.candidates().joinToString(", ") { "${it.version.raw} (${it.kind.label})" }
-                    out += Result(e.versionRange, "LibMan: update available - $tip", highlight = true)
+                    // A pre-release alone keeps its chip and tooltip, but the version is not marked outdated.
+                    out += Result(e.versionRange, "LibMan: update available - $tip", highlight = buckets.hasStable())
                 }
             }
             out
