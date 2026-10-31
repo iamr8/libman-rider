@@ -39,7 +39,7 @@ dependencies {
     }
 
     // Bundled with the plugin; parses provider catalog responses (cdnjs / npm / jsDelivr).
-    implementation("com.google.code.gson:gson:2.14.0")
+    implementation("com.google.code.gson:gson:2.15.0")
 
     testImplementation("junit:junit:4.13.2")
 }
